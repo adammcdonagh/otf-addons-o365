@@ -13,7 +13,7 @@ classifiers = [
     "Operating System :: POSIX",
 ]
 keywords = ["automation", "task", "framework", "aws", "s3", "ssm", "otf"]
-dependencies = ["Office365-REST-Python-Client >= 2.5.6", "opentaskpy >= v24.10.0"]
+dependencies = ["msgraph-sdk", "opentaskpy >= v24.10.0"]
 description = "Addons for opentaskpy, giving it the ability to push/pull via AWS S3, and pull variables from AWS SSM Parameter Store."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -33,7 +33,7 @@ dev = [
     "mypy",
     "ruff",
     "coverage",
-    "pytest-cov"
+    "pytest-cov",
 ]
 
 [project.urls]
