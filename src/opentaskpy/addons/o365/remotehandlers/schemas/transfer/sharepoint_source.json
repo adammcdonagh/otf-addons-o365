@@ -1,0 +1,41 @@
+{
+  "$id": "http://localhost/transfer/sharepoint_source.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "siteHostname": {
+      "type": "string"
+    },
+    "siteName": {
+      "type": "string",
+      "default": ""
+    },
+    "directory": {
+      "type": "string",
+      "default": ""
+    },
+    "fileRegex": {
+      "type": "string"
+    },
+    "fileWatch": {
+      "$ref": "sharepoint_source/fileWatch.json"
+    },
+    "error": {
+      "type": "boolean"
+    },
+    "postCopyAction": {
+      "$ref": "sharepoint_source/postCopyAction.json"
+    },
+    "protocol": {
+      "$ref": "sharepoint_source/protocol.json"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "siteHostname",
+    "siteName",
+    "directory",
+    "fileRegex",
+    "protocol"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "$id": "http://localhost/transfer/s3_destination.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "bucket": {
+      "type": "string"
+    },
+    "directory": {
+      "type": "string",
+      "default": ""
+    },
+    "flags": {
+      "$ref": "s3_destination/flags.json"
+    },
+    "transferType": {
+      "type": "string",
+      "enum": ["proxy", "push"]
+    },
+    "protocol": {
+      "$ref": "s3_destination/protocol.json"
+    },
+    "rename": {
+      "$ref": "s3_destination/rename.json"
+    }
+  },
+  "additionalProperties": false,
+  "required": ["bucket", "protocol"]
+}
