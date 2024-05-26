@@ -5,11 +5,7 @@
   "properties": {
     "action": {
       "type": "string",
-      "enum": [
-        "move",
-        "rename",
-        "delete"
-      ]
+      "enum": ["move", "rename", "delete"]
     },
     "destination": {
       "type": "string"
@@ -21,26 +17,18 @@
       "type": "string"
     }
   },
-  "required": [
-    "action"
-  ],
+  "required": ["action"],
   "allOf": [
     {
       "if": {
         "properties": {
           "action": {
-            "enum": [
-              "move",
-              "rename"
-            ]
+            "enum": ["move", "rename"]
           }
         }
       },
       "then": {
-        "required": [
-          "action",
-          "destination"
-        ]
+        "required": ["action", "destination"]
       },
       "else": {
         "properties": {
@@ -59,10 +47,7 @@
         }
       },
       "then": {
-        "required": [
-          "sub",
-          "pattern"
-        ]
+        "required": ["sub", "pattern"]
       }
     },
     {
@@ -75,10 +60,7 @@
       },
       "then": {
         "not": {
-          "required": [
-            "sub",
-            "pattern"
-          ]
+          "required": ["sub", "pattern"]
         }
       }
     },

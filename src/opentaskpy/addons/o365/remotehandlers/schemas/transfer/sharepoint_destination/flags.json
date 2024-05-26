@@ -7,8 +7,6 @@
       "type": "string"
     }
   },
-  "required": [
-    "fullPath"
-  ],
+  "required": ["fullPath"],
   "additionalProperties": false
 }

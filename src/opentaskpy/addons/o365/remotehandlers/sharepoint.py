@@ -1,9 +1,8 @@
 """O365 Sharepoint remote handler."""
 
 import glob
-import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import opentaskpy.otflogging
 import requests

@@ -19,11 +19,6 @@
       "type": "string"
     }
   },
-  "required": [
-    "name",
-    "refreshToken",
-    "clientId",
-    "tenantId"
-  ],
+  "required": ["name", "refreshToken", "clientId", "tenantId"],
   "additionalProperties": false
 }
