@@ -19,30 +19,36 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "GitHub.copilot",
         "ms-python.vscode-pylance",
         "ms-python.python",
-        "esbenp.vscode-prettier",
         "ms-azuretools.vscode-docker",
         "ms-python.isort",
         "yzhang.markdown-all-in-one",
         "ms-python.pylint",
-        "ms-python.mypy-type-checker",
+        "matangover.mypy",
         "charliermarsh.ruff",
         "ms-python.black-formatter",
         "tamasfe.even-better-toml",
-        "esbenp.prettier-vscode"
+        "esbenp.prettier-vscode",
+        "redhat.ansible",
+        "github.vscode-github-actions"
       ],
       "settings": {
+        "editor.detectIndentation": false, // Force spaces for indentation
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
         "python.testing.unittestArgs": ["-v", "-s", "tests", "-p", "test_*.py"],
         "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "pylint.path": ["python", "-m", "pylint"],
-        "pylint.lintOnChange": true,
         "python.testing.unittestEnabled": false,
-        "python.testing.pytestArgs": ["-s", "."],
+        "python.testing.pytestArgs": ["."],
         "python.analysis.typeCheckingMode": "off",
         "files.associations": {
-          "*.json": "jsonc"
+          "*.json": "jsonc",
+          "*.json.j2": "jsonc"
+        },
+        "prettier.useTabs": false,
+        "[jsonc]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
         },
         "files.autoSave": "off", // needed for editor.formatOnSave
         "files.insertFinalNewline": true, // needed for pre-commit check
@@ -61,7 +67,8 @@
         "mypy.enabled": true,
         "[python]": {
           "editor.defaultFormatter": "ms-python.black-formatter"
-        }
+        },
+        "mypy.extraArguments": ["--exclude", "build"]
       }
     }
   }
