@@ -45,6 +45,7 @@ class SharepointTransfer(RemoteTransferHandler):
         response = requests.get(
             f"https://graph.microsoft.com/v1.0/sites/{self.spec['siteHostname']}:/sites/{self.spec['siteName']}",
             headers=self.headers,
+            timeout=5,
         ).json()
 
         # Check the response is OK
@@ -60,15 +61,13 @@ class SharepointTransfer(RemoteTransferHandler):
         self.logger.debug(
             f"Creds expire at: {self.credentials['expiry']} - Now: {datetime.now(tz=tzlocal())}"
         )
-
-        ## TODO:
+        # TODO:
         return
 
     def supports_direct_transfer(self) -> bool:
-        """Return True, as you can do Sharepoint to Sharepoint transfers."""
-        return True
+        """Return False, as all files should go via the worker."""
+        return False
 
-    # TODO:
     def handle_post_copy_action(self, files: list[str]) -> int:
         """Handle the post copy action specified in the config.
 
@@ -78,124 +77,7 @@ class SharepointTransfer(RemoteTransferHandler):
         Returns:
             int: 0 if successful, 1 if not.
         """
-        # Check that our creds are valid
-        self.validate_or_refresh_creds()
-
-        # Determine the action to take
-        # Delete the files
-        if self.spec["postCopyAction"]["action"] == "delete":
-            self.logger.info(f"Deleting files: {files}")
-            response = self.s3_client.delete_objects(
-                Bucket=self.spec["bucket"],
-                Delete={
-                    "Objects": [{"Key": file} for file in files],
-                    "Quiet": True,
-                },
-            )
-
-            # Check response for errors
-            if response.get("Errors"):
-                self.logger.error(response)
-                return 1
-
-            # Verify the files have been deleted
-            for file in files:
-                try:
-                    response = self.s3_client.head_object(
-                        Bucket=self.spec["bucket"], Key=file
-                    )
-                    self.logger.error(response)
-                    self.logger.error(f"Failed to delete file: {file}")
-                    return 1
-                except ClientError as e:
-                    # If it's a 404 then its good
-                    if e.response["Error"]["Code"] == "404":
-                        continue
-                    # Otherwise, it's an error
-                    self.logger.exception(e)
-                    return 1
-
-        # Copy the files to the new location, and then delete the originals
-        if (
-            self.spec["postCopyAction"]["action"] == "move"
-            or self.spec["postCopyAction"]["action"] == "rename"
-        ):
-            for file in files:
-                source_bucket = self.spec["bucket"]
-                dest_bucket = self.spec["bucket"]
-                new_file = (
-                    f"{self.spec['postCopyAction']['destination']}{file.split('/')[-1]}"
-                )
-                if self.spec["postCopyAction"]["action"] == "rename":
-
-                    # Use the pattern and sub values to rename the file correctly
-                    new_file = re.sub(
-                        self.spec["postCopyAction"]["pattern"],
-                        self.spec["postCopyAction"]["sub"],
-                        new_file,
-                    )
-
-                else:
-                    # Check if the destination starts with s3://, if so, then we are also moving bucket
-                    if self.spec["postCopyAction"]["destination"].startswith("s3://"):
-                        dest_bucket = self.spec["postCopyAction"]["destination"].split(
-                            "/"
-                        )[2]
-                        new_file = (
-                            self.spec["postCopyAction"]["destination"].split("/", 3)[3]
-                            + file.split("/")[-1]
-                        )
-
-                self.logger.info(
-                    f'"Moving" file from s3://{source_bucket}/{file} to s3://{dest_bucket}/{new_file}'
-                )
-
-                self.s3_client.copy_object(
-                    Bucket=dest_bucket,
-                    CopySource={
-                        "Bucket": source_bucket,
-                        "Key": file,
-                    },
-                    Key=new_file,
-                )
-
-                # Check that the copy worked
-                try:
-                    self.s3_client.head_object(Bucket=dest_bucket, Key=new_file)
-                except Exception as e:
-                    # Print the exception message
-                    self.logger.error(e)
-                    self.logger.error(f"Failed to copy file: {file}")
-                    return 1
-
-                response = self.s3_client.delete_objects(
-                    Bucket=source_bucket,
-                    Delete={
-                        "Objects": [{"Key": file}],
-                        "Quiet": True,
-                    },
-                )
-                # Check response for errors
-                if response.get("Errors"):
-                    self.logger.error(response)
-                    return 1
-
-                # Check that the delete worked
-                try:
-                    response = self.s3_client.head_object(
-                        Bucket=source_bucket, Key=file
-                    )
-                    self.logger.error(response)
-                    self.logger.error(f"Failed to delete file: {file}")
-                    return 1
-                except ClientError as e:
-                    # If it's a 404 then its good
-                    if e.response["Error"]["Code"] == "404":
-                        continue
-                    # Otherwise, it's an error
-                    self.logger.exception(e)
-                    return 1
-        return 0
+        raise NotImplementedError
 
     def list_files(
         self, directory: str | None = None, file_pattern: str | None = None
@@ -345,7 +227,9 @@ class SharepointTransfer(RemoteTransferHandler):
                     self.logger.error(response.json())
                     result = 1
 
-                self.logger.info(f"Successfully uploaded file to: {response['webUrl']}")
+                self.logger.info(
+                    f"Successfully uploaded file to: {response.json().webUrl}"
+                )
 
         return result
 
@@ -354,7 +238,7 @@ class SharepointTransfer(RemoteTransferHandler):
     ) -> int:
         """Pull files to the worker.
 
-        Download files from AWS S3 to the local staging directory.
+        Download files from Sharepoint to the local staging directory.
 
         Args:
             files (list): A list of files to download.
@@ -364,111 +248,20 @@ class SharepointTransfer(RemoteTransferHandler):
         Returns:
             int: 0 if successful, 1 if not.
         """
-        # Check that our creds are valid
-        self.validate_or_refresh_creds()
-
-        result = 0
-        for file in files:
-            # Strip the directory from the file
-            file_name = file.split("/")[-1]
-            self.logger.info(f"Downloading file: {file}")
-            try:
-                self.s3_client.download_file(
-                    self.spec["bucket"],
-                    file,
-                    f"{local_staging_directory}/{file_name}",
-                )
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                self.logger.error(f"Failed to transfer file: {file}")
-                self.logger.exception(e)
-                result = 1
-
-        return result
+        raise NotImplementedError
 
     def transfer_files(
         self,
         files: list[str],
-        remote_spec: dict,  # noqa: ARG002
+        remote_spec: dict,
         dest_remote_handler: RemoteTransferHandler,
     ) -> int:
-        """Transfer files from the source S3 bucket to the destination bucket.
-
-        Args:
-            files (dict): A dictionary of files to transfer.
-            remote_spec (dict): Not used by this handler.
-            dest_remote_handler (RemoteTransferHandler): The remote handler
-            for the destination bucket
-
-        Returns:
-            int: 0 if successful, if not, then 1
-            command.
-        """
-        # Check that our creds are valid
-        self.validate_or_refresh_creds()
-
-        # Check the remote handler, if it's another S3Transfer, then it's simple
-        # to do an S3 copy via boto
-
-        result = 0
-        for file in files:
-            # Strip the directory from the file
-            file_name = file.split("/")[-1]
-            # Handle any rename that might be specified in the spec
-            if "rename" in dest_remote_handler.spec:
-                rename_regex = dest_remote_handler.spec["rename"]["pattern"]
-                rename_sub = dest_remote_handler.spec["rename"]["sub"]
-
-                file_name = re.sub(rename_regex, rename_sub, file_name)
-                self.logger.info(f"Renaming file to {file_name}")
-            self.logger.info(
-                f"Transferring file: {file} from {self.spec['bucket']} to"
-                f" {dest_remote_handler.spec['bucket']}/{file_name}"
-            )
-            try:
-                self.s3_client.copy(
-                    {
-                        "Bucket": self.spec["bucket"],
-                        "Key": file,
-                    },
-                    dest_remote_handler.spec["bucket"],
-                    f"{dest_remote_handler.spec['directory']}/{file_name}",
-                )
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                self.logger.error(f"Error transferring file: {file}")
-                self.logger.exception(e)
-                result = 1
-
-        return result
+        """Not implemented for this transfer type."""
+        raise NotImplementedError
 
     def create_flag_files(self) -> int:
-        """Create the flag files on the S3 bucket.
-
-        Returns:
-            int: 0 if successful, 1 if not.
-        """
-        # Check that our creds are valid
-        self.validate_or_refresh_creds()
-
-        result = 0
-
-        object_key = self.spec["flags"]["fullPath"]
-        self.logger.info(f"Creating flag file: {object_key}")
-        kwargs = {
-            "Bucket": self.spec["bucket"],
-            "Key": object_key,
-        }
-        if self.bucket_owner_full_control:
-            kwargs["ACL"] = "bucket-owner-full-control"
-
-        try:
-            self.s3_client.put_object(**kwargs)
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            self.logger.error(f"Error creating flag file: {object_key}")
-            self.logger.exception(e)
-            result = 1
-
-        return result
+        """Not implemented for this transfer type."""
+        raise NotImplementedError
 
     def tidy(self) -> None:
         """Nothing to tidy."""
-        pass
