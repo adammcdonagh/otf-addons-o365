@@ -12,7 +12,7 @@ classifiers = [
   "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Operating System :: POSIX",
 ]
-keywords = ["automation", "task", "framework", "aws", "s3", "ssm", "otf"]
+keywords = ["automation", "task", "framework", "o365", "sharepoint", "otf"]
 dependencies = ["python-dateutil", "requests", "msal", "opentaskpy >= v24.10.0"]
 description = "Addons for opentaskpy, giving it the ability to push/pull via Sharepoint using the MS Graph API."
 readme = "README.md"
@@ -34,6 +34,7 @@ dev = [
   "ruff",
   "coverage",
   "pytest-cov",
+  "python-dotenv",
 ]
 
 [project.urls]
@@ -381,3 +382,7 @@ convention = "google"
 
 [tool.ruff.mccabe]
 max-complexity = 25
+
+
+[tool.pytest.ini_options]
+log_cli = true

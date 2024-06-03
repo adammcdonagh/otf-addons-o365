@@ -11,8 +11,7 @@
       "default": ""
     },
     "directory": {
-      "type": "string",
-      "default": ""
+      "type": "string"
     },
     "fileRegex": {
       "type": "string"
@@ -31,5 +30,5 @@
     }
   },
   "additionalProperties": false,
-  "required": ["siteHostname", "siteName", "directory", "fileRegex", "protocol"]
+  "required": ["siteHostname", "siteName", "fileRegex", "protocol"]
 }

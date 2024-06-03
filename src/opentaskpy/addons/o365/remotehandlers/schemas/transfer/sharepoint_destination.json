@@ -3,15 +3,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "bucket": {
+    "siteHostname": {
       "type": "string"
     },
-    "directory": {
+    "siteName": {
       "type": "string",
       "default": ""
     },
-    "flags": {
-      "$ref": "sharepoint_destination/flags.json"
+    "directory": {
+      "type": "string"
     },
     "transferType": {
       "type": "string",
@@ -25,5 +25,5 @@
     }
   },
   "additionalProperties": false,
-  "required": ["bucket", "protocol"]
+  "required": ["siteHostname", "siteName", "protocol"]
 }

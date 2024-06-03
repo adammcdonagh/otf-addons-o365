@@ -7,6 +7,8 @@ from datetime import datetime
 import opentaskpy.otflogging
 import requests
 from dateutil.tz import tzlocal
+from opentaskpy.config.variablecaching import cache_utils
+from opentaskpy.exceptions import RemoteTransferError
 from opentaskpy.remotehandlers.remotehandler import RemoteTransferHandler
 
 from .creds import get_access_token
@@ -32,12 +34,17 @@ class SharepointTransfer(RemoteTransferHandler):
 
         super().__init__(spec)
 
-        # TODO: Handle token expiry etc
         self.credentials = get_access_token(self.spec["protocol"])
+        # Update the refresh token in the spec
+        self.spec["protocol"]["refreshToken"] = self.credentials["refresh_token"]
 
         self.validate_or_refresh_creds()
 
-        # Obtain the source site ID via the Graph API
+        if "cacheableVariables" in self.spec:
+            self.handle_cacheable_variables()
+
+        # Obtain the source site ID via the Graph API based on the site name and
+        # hostname
         self.headers = {
             "Authorization": "Bearer " + self.credentials["access_token"],
             "Content-Type": "application/json",
@@ -53,16 +60,42 @@ class SharepointTransfer(RemoteTransferHandler):
             self.logger.error(
                 f"Error obtaining site ID from Graph API: {response.get('error')}"
             )
-            raise Exception(response["error"]["message"])
+            raise RemoteTransferError(response["error"]["message"])
         self.site_id = response["id"]
 
     def validate_or_refresh_creds(self) -> None:
         """Check the expiry of the access token, and get a new one if necessary."""
-        self.logger.debug(
-            f"Creds expire at: {self.credentials['expiry']} - Now: {datetime.now(tz=tzlocal())}"
+        # Convert the epoch from the credentials into the current datatime
+        expiry_datetime = datetime.fromtimestamp(
+            self.credentials["expiry"], tz=tzlocal()
         )
-        # TODO:
+        self.logger.debug(
+            f"Creds expire at: {expiry_datetime} - Now: {datetime.now(tz=tzlocal())}"
+        )
+
+        # If the expiry time is less than the current time, refresh the creds
+        if expiry_datetime < datetime.now(tz=tzlocal()):
+            self.logger.info("Refreshing credentials")
+            self.credentials = get_access_token(self.spec["protocol"])
+            # Update the refresh token in the spec
+            self.spec["protocol"]["refreshToken"] = self.credentials["refresh_token"]
+
+        # If there's cacheable variables, handle them
+        if "cacheableVariables" in self.spec:
+            self.handle_cacheable_variables()
+
         return
+
+    def handle_cacheable_variables(self) -> None:
+        """Handle the cacheable variables."""
+        # Obtain the "updated" value from the spec
+        for cacheable_variable in self.spec["cacheableVariables"]:
+
+            updated_value = self.obtain_variable_from_spec(
+                cacheable_variable["variableName"], self.spec
+            )
+
+            cache_utils.update_cache(cacheable_variable, updated_value)
 
     def supports_direct_transfer(self) -> bool:
         """Return False, as all files should go via the worker."""
@@ -96,7 +129,7 @@ class SharepointTransfer(RemoteTransferHandler):
 
         self.logger.info(
             f"Listing files in site {self.spec['siteName']} matching"
-            f" {file_pattern}{' in' + (directory or '')}"
+            f" {file_pattern} in {directory if directory else '/'}"
         )
 
         try:  # pylint: disable=too-many-nested-blocks
@@ -204,9 +237,13 @@ class SharepointTransfer(RemoteTransferHandler):
 
                 file_name = re.sub(rename_regex, rename_sub, file_name)
                 self.logger.info(f"Renaming file to {file_name}")
+
+            # Append a directory if one is defined
+            if "directory" in self.spec:
+                file_name = f"{self.spec['directory']}/{file_name}"
+
             self.logger.info(
-                f"Uploading file: {file} to"
-                f" https://{self.spec['siteHostname']}/sites/{self.spec['siteName']}/Shared%20Documents/{file_name}"
+                f"Uploading file: {file} to site {self.spec['siteName']} with path: {file_name}"
             )
 
             upload_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_name}:/content"
@@ -222,13 +259,14 @@ class SharepointTransfer(RemoteTransferHandler):
                 )
 
                 # Check the response was a success
-                if response.status_code != 200:
+                if response.status_code in (200, 201):
                     self.logger.error(f"Failed to upload file: {file}")
+                    self.logger.error(f"Got return code: {response.status_code}")
                     self.logger.error(response.json())
                     result = 1
 
                 self.logger.info(
-                    f"Successfully uploaded file to: {response.json().webUrl}"
+                    f"Successfully uploaded file to: {response.json()['webUrl']}"
                 )
 
         return result
