@@ -1,4 +1,4 @@
-name: Test & Linting
+name: Linting
 
 env:
   DEFAULT_PYTHON: "3.11"
@@ -11,6 +11,7 @@ on:
   pull_request:
     types: [opened, synchronize]
     branches: main
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -54,7 +55,6 @@ jobs:
           . venv/bin/activate
           python -m pip install -U pip setuptools wheel
           pip install -U ".[dev]"
-          docker pull localstack/localstack
       - name: Generate pre-commit restore key
         id: generate-pre-commit-key
         run: >-
@@ -109,7 +109,7 @@ jobs:
       - name: Run ruff
         run: |
           . venv/bin/activate
-          pre-commit run --hook-stage manual ruff --all-files --show-diff-on-failure
+          pre-commit run ruff --all-files --show-diff-on-failure
 
   lint-black:
     name: black
@@ -144,7 +144,7 @@ jobs:
       - name: Run black checks
         run: |
           . venv/bin/activate
-          pre-commit run --hook-stage manual black --all-files --show-diff-on-failure
+          pre-commit run black --all-files --show-diff-on-failure
 
   pylint:
     name: Check pylint
@@ -183,7 +183,7 @@ jobs:
         run: |
           . venv/bin/activate
           pip install -U .
-          pre-commit run --hook-stage manual pylint --all-files
+          pre-commit run pylint --all-files
 
   mypy:
     name: Check mypy
@@ -261,7 +261,7 @@ jobs:
       - name: Run yamllint
         run: |
           . venv/bin/activate
-          pre-commit run --hook-stage manual yamllint --all-files --show-diff-on-failure
+          pre-commit run yamllint --all-files --show-diff-on-failure
 
       - name: Register check-json problem matcher
         run: |
@@ -269,7 +269,7 @@ jobs:
       - name: Run check-json5
         run: |
           . venv/bin/activate
-          pre-commit run --hook-stage manual check-json5 --all-files
+          pre-commit run check-json5 --all-files
 
       - name: Register check executables problem matcher
         run: |
@@ -277,7 +277,7 @@ jobs:
       - name: Run executables check
         run: |
           . venv/bin/activate
-          pre-commit run --hook-stage manual check-executables-have-shebangs --all-files
+          pre-commit run check-executables-have-shebangs --all-files
 
       - name: Register codespell problem matcher
         run: |
@@ -285,57 +285,17 @@ jobs:
       - name: Run codespell
         run: |
           . venv/bin/activate
-          pre-commit run --show-diff-on-failure --hook-stage manual codespell --all-files
+          pre-commit run --show-diff-on-failure codespell --all-files
 
       - name: Run prettier
         run: |
           . venv/bin/activate
-          pre-commit run --hook-stage manual prettier --all-files
+          pre-commit run prettier --all-files
 
       - name: Run bandit (fully)
         run: |
           . venv/bin/activate
-          pre-commit run --hook-stage manual bandit --all-files --show-diff-on-failure
-
-  test:
-    name: test
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: prepare-base
-    steps:
-      - name: Check out code from GitHub
-        uses: actions/checkout@v3.5.2
-      - name: Set up Python ${{ env.DEFAULT_PYTHON }}
-        id: python
-        uses: actions/setup-python@v4.6.0
-        with:
-          python-version: ${{ env.DEFAULT_PYTHON }}
-          check-latest: true
-      - name: Restore Python virtual environment
-        id: cache-venv
-        uses: actions/cache@v3.3.1
-        with:
-          path: venv
-          fail-on-cache-miss: true
-          key: ${{ runner.os }}-${{ steps.python.outputs.python-version }}-${{
-            needs.prepare-base.outputs.python-key }}
-      - name: Run tests
-        run: |
-          . venv/bin/activate
-          pip install -U .
-          python -m pytest --cov="opentaskpy.addons.o365" --cov="opentaskpy.plugins.o365" --cov-report=xml
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
-        if: ${{ failure() }}
-        with:
-          # If no one connects after 5 minutes, shut down server.
-          wait-timeout-minutes: 5
-        
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          pre-commit run bandit --all-files --show-diff-on-failure
 
   changelog:
     name: Check Changelog

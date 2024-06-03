@@ -1,0 +1,27 @@
+{
+  "$id": "http://localhost/transfer/sharepoint_destination/protocol.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "enum": [
+        "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer"
+      ]
+    },
+    "refreshToken": {
+      "type": "string"
+    },
+    "clientId": {
+      "type": "string"
+    },
+    "tenantId": {
+      "type": "string"
+    },
+    "cache": {
+      "$ref": "../cache.json"
+    }
+  },
+  "required": ["name", "refreshToken", "clientId", "tenantId"],
+  "additionalProperties": false
+}

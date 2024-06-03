@@ -1,5 +1,5 @@
 # Changelog
 
-## v24.10.0
+## v24.23.0
 
 - Initial version

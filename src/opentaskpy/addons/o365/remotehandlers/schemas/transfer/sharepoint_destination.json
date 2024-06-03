@@ -1,0 +1,29 @@
+{
+  "$id": "http://localhost/transfer/sharepoint_destination.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "siteHostname": {
+      "type": "string"
+    },
+    "siteName": {
+      "type": "string",
+      "default": ""
+    },
+    "directory": {
+      "type": "string"
+    },
+    "transferType": {
+      "type": "string",
+      "enum": ["proxy", "push"]
+    },
+    "protocol": {
+      "$ref": "sharepoint_destination/protocol.json"
+    },
+    "rename": {
+      "$ref": "sharepoint_destination/rename.json"
+    }
+  },
+  "additionalProperties": false,
+  "required": ["siteHostname", "siteName", "protocol"]
+}
