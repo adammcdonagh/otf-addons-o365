@@ -17,9 +17,6 @@
     },
     "tenantId": {
       "type": "string"
-    },
-    "cache": {
-      "$ref": "../cache.json"
     }
   },
   "required": ["name", "refreshToken", "clientId", "tenantId"],
