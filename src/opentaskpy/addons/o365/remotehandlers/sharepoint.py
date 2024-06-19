@@ -259,15 +259,15 @@ class SharepointTransfer(RemoteTransferHandler):
                 )
 
                 # Check the response was a success
-                if response.status_code in (200, 201):
+                if response.status_code not in (200, 201):
                     self.logger.error(f"Failed to upload file: {file}")
                     self.logger.error(f"Got return code: {response.status_code}")
                     self.logger.error(response.json())
                     result = 1
-
-                self.logger.info(
-                    f"Successfully uploaded file to: {response.json()['webUrl']}"
-                )
+                else:
+                    self.logger.info(
+                        f"Successfully uploaded file to: {response.json()['webUrl']}"
+                    )
 
         return result
 

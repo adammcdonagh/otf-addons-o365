@@ -1,5 +1,9 @@
 # Changelog
 
+## v24.25.2
+
+- Fix return code after successful upload
+
 ## v24.25.1
 
 - Fix schemas
