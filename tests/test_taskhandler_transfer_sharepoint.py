@@ -17,6 +17,12 @@ local_source_definition = {
     "protocol": {"name": "local"},
 }
 
+local_destination_definition = {
+    "directory": "",
+    "filename": "",
+    "protocol": {"name": "local"},
+}
+
 sharepoint_destination_definition = {
     "siteHostname": None,
     "siteName": None,
@@ -38,33 +44,53 @@ sharepoint_destination_definition = {
     ],
 }
 
-sharepoint_filewatch_task_definition = {
-    "type": "transfer",
-    "source": {
-        "siteHostname": None,
-        "siteName": None,
-        "directory": "src",
-        "fileRegex": ".*\\.txt",
-        "protocol": {
-            "name": "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer",
-            "refreshToken": "",
-            "clientId": None,
-            "tenantId": None,
-        },
-        "fileWatch": {
-            "timeout": 2,
-        },
-        "cacheableVariables": [
-            {
-                "variableName": "protocol.refreshToken",
-                "cachingPlugin": "file",
-                "cacheArgs": {
-                    "file": None,
-                },
-            }
-        ],
+sharepoint_source_definition = {
+    "siteHostname": None,
+    "siteName": None,
+    "directory": "src",
+    "fileRegex": "^test.txt$",
+    "protocol": {
+        "name": "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer",
+        "refreshToken": "",
+        "clientId": None,
+        "tenantId": None,
     },
+    "cacheableVariables": [
+        {
+            "variableName": "protocol.refreshToken",
+            "cachingPlugin": "file",
+            "cacheArgs": {
+                "file": None,
+            },
+        }
+    ],
 }
+
+sharepoint_filewatch_task_definition_source = {
+    "siteHostname": None,
+    "siteName": None,
+    "directory": "src",
+    "fileRegex": ".*\\.txt",
+    "protocol": {
+        "name": "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer",
+        "refreshToken": "",
+        "clientId": None,
+        "tenantId": None,
+    },
+    "fileWatch": {
+        "timeout": 2,
+    },
+    "cacheableVariables": [
+        {
+            "variableName": "protocol.refreshToken",
+            "cachingPlugin": "file",
+            "cacheArgs": {
+                "file": None,
+            },
+        }
+    ],
+}
+
 
 """
 These tests are hard to fully automate, given a full set of creds are needed for the environment.
@@ -151,45 +177,53 @@ def setup_creds_for_transfer(transfer_definition: dict, creds) -> dict:
     return transfer_definition
 
 
-def test_sharepoint_filewatch_root(o365_creds):
+def test_sharepoint_filewatch_root(tmpdir, o365_creds):
 
     # Load variables from the environment
 
-    sharepoint_filewatch_task_definition_copy = deepcopy(
-        sharepoint_filewatch_task_definition
-    )
+    sharepoint_filewatch_task_definition = {
+        "type": "transfer",
+        "source": deepcopy(sharepoint_filewatch_task_definition_source),
+        "destination": [deepcopy(local_destination_definition)],
+    }
 
-    sharepoint_filewatch_task_definition_copy = setup_creds_for_transfer(
-        sharepoint_filewatch_task_definition_copy, o365_creds
+    sharepoint_filewatch_task_definition = setup_creds_for_transfer(
+        sharepoint_filewatch_task_definition, o365_creds
     )
 
     # Set the directory to the top level
-    sharepoint_filewatch_task_definition_copy["source"]["directory"] = ""
+    sharepoint_filewatch_task_definition["source"]["directory"] = ""
+    # Set the destination directory to the temp directory
+    sharepoint_filewatch_task_definition["destination"][0]["directory"] = tmpdir.strpath
 
     transfer_obj = transfer.Transfer(
-        None, "sharepoint_filewatch", sharepoint_filewatch_task_definition_copy
+        None, "sharepoint_filewatch", sharepoint_filewatch_task_definition
     )
 
     assert transfer_obj.run()
 
 
-def test_sharepoint_filewatch_sub_dir(o365_creds):
+def test_sharepoint_filewatch_sub_dir(tmpdir, o365_creds):
 
     # Load variables from the environment
 
-    sharepoint_filewatch_task_definition_copy = deepcopy(
-        sharepoint_filewatch_task_definition
-    )
+    sharepoint_filewatch_task_definition = {
+        "type": "transfer",
+        "source": deepcopy(sharepoint_filewatch_task_definition_source),
+        "destination": [deepcopy(local_destination_definition)],
+    }
 
-    sharepoint_filewatch_task_definition_copy = setup_creds_for_transfer(
-        sharepoint_filewatch_task_definition_copy, o365_creds
+    sharepoint_filewatch_task_definition = setup_creds_for_transfer(
+        sharepoint_filewatch_task_definition, o365_creds
     )
 
     # Set the directory to the src sub directory
-    sharepoint_filewatch_task_definition_copy["source"]["directory"] = "src"
+    sharepoint_filewatch_task_definition["source"]["directory"] = "src"
+    # Set the destination directory to the temp directory
+    sharepoint_filewatch_task_definition["destination"][0]["directory"] = tmpdir.strpath
 
     transfer_obj = transfer.Transfer(
-        None, "sharepoint_filewatch", sharepoint_filewatch_task_definition_copy
+        None, "sharepoint_filewatch", sharepoint_filewatch_task_definition
     )
 
     assert transfer_obj.run()
@@ -218,23 +252,24 @@ def test_local_to_sharepoint_transfer(tmpdir, o365_creds):
     assert transfer_obj.run()
 
 
-def test_transfer_refresh_token_update(o365_creds):
+def test_transfer_refresh_token_update(tmpdir, o365_creds):
 
     # Load variables from the environment
 
-    sharepoint_filewatch_task_definition_copy = deepcopy(
-        sharepoint_filewatch_task_definition
-    )
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(sharepoint_filewatch_task_definition_source),
+        "destination": [deepcopy(local_destination_definition)],
+    }
 
-    sharepoint_filewatch_task_definition_copy = setup_creds_for_transfer(
-        sharepoint_filewatch_task_definition_copy
-    )
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
 
-    transfer_obj = transfer.Transfer(
-        None, "sharepoint_filewatch", sharepoint_filewatch_task_definition_copy
-    )
+    # Set the destination directory to the temp directory
+    task_definition["destination"][0]["directory"] = tmpdir.strpath
 
-    assert transfer_obj.run()
+    transfer_obj = transfer.Transfer(None, "sharepoint_filewatch", task_definition)
+
+    transfer_obj.run()
 
     # Check that the refresh_token.txt file has been updated and has something different
     # to before
@@ -243,4 +278,159 @@ def test_transfer_refresh_token_update(o365_creds):
 
     assert new_refresh_token != o365_creds["refreshToken"]
 
+
+def test_sharepoint_to_local_transfer(tmpdir, o365_creds):
+
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(sharepoint_source_definition),
+        "destination": [deepcopy(local_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the destination directory to the temp directory
+    task_definition["destination"][0]["directory"] = tmpdir.strpath
+
+    transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
+
+    assert transfer_obj.run()
+
+
+def test_sharepoint_pca_delete(tmpdir, o365_creds):
+    # Upload file first to ensure present before we delete
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(local_source_definition),
+        "destination": [deepcopy(sharepoint_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the directory to the temp directory
+    task_definition["source"]["directory"] = tmpdir
+    task_definition["source"]["fileRegex"] = "^pca_delete.txt$"
+    task_definition["destination"][0]["directory"] = "src/pca_delete"
+
+    # Create a file in the tmpdir
+    with open(f"{tmpdir}/pca_delete.txt", "w") as f:
+        f.write("pca_delete")
+
+    transfer_obj = transfer.Transfer(None, "local-to-sharepoint-copy", task_definition)
     transfer_obj.run()
+
+    # Then attempt transfer with sharepoint source with PCA delete
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(sharepoint_source_definition),
+        "destination": [deepcopy(local_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the destination directory to the temp directory
+    task_definition["destination"][0]["directory"] = tmpdir.strpath
+
+    # Set the PCA with delete
+    task_definition["source"]["directory"] = "src/pca_delete"
+    task_definition["source"]["fileRegex"] = "^pca_delete.txt$"
+    task_definition["source"]["postCopyAction"] = {
+        "action": "delete",
+    }
+    transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
+
+    assert transfer_obj.run()
+
+
+def test_sharepoint_pca_move(tmpdir, o365_creds):
+    # Upload file first to ensure present before we move
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(local_source_definition),
+        "destination": [deepcopy(sharepoint_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the directory to the temp directory
+    task_definition["source"]["directory"] = tmpdir
+    task_definition["source"]["fileRegex"] = "^pca_move.txt$"
+    task_definition["destination"][0]["directory"] = "src/pca_move"
+
+    # Create a file in the tmpdir
+    with open(f"{tmpdir}/pca_move.txt", "w") as f:
+        f.write("pca_move")
+
+    transfer_obj = transfer.Transfer(None, "local-to-sharepoint-copy", task_definition)
+    transfer_obj.run()
+
+    # Then attempt transfer with sharepoint source with PCA move
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(sharepoint_source_definition),
+        "destination": [deepcopy(local_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the destination directory to the temp directory
+    task_definition["destination"][0]["directory"] = tmpdir.strpath
+
+    # Set the PCA with move
+    task_definition["source"]["directory"] = "src/pca_move"
+    task_definition["source"]["fileRegex"] = "^pca_move.txt$"
+    task_definition["source"]["postCopyAction"] = {
+        "action": "move",
+        "destination": "archive2",
+    }
+    transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
+
+    assert transfer_obj.run()
+
+
+def test_sharepoint_pca_rename(tmpdir, o365_creds):
+    # Upload file first to ensure present before we rename
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(local_source_definition),
+        "destination": [deepcopy(sharepoint_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the directory to the temp directory
+    task_definition["source"]["directory"] = tmpdir
+    task_definition["source"]["fileRegex"] = "^pca_rename.txt$"
+    task_definition["destination"][0]["directory"] = "src/pca_rename"
+
+    # Create a file in the tmpdir
+    with open(f"{tmpdir}/pca_rename.txt", "w") as f:
+        f.write("pca_rename")
+
+    transfer_obj = transfer.Transfer(None, "local-to-sharepoint-copy", task_definition)
+    transfer_obj.run()
+
+    # Then attempt transfer with sharepoint source with PCA rename
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(sharepoint_source_definition),
+        "destination": [deepcopy(local_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the destination directory to the temp directory
+    task_definition["destination"][0]["directory"] = tmpdir.strpath
+
+    # Set the PCA with rename
+    task_definition["source"]["directory"] = "src/pca_rename"
+    task_definition["source"]["fileRegex"] = "^pca_rename.txt$"
+    task_definition["source"]["postCopyAction"] = {
+        "action": "rename",
+        "destination": "archive",
+        "pattern": "rename",
+        "sub": "renamed",
+    }
+    transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
+
+    assert transfer_obj.run()

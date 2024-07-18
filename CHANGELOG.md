@@ -1,5 +1,9 @@
 # Changelog
 
+## v24.29.0
+
+- Implement RemoteTransfer methods for sharepoint to act as a source, including PostCopyActions (move, delete, rename)
+
 ## v24.25.2
 
 - Fix return code after successful upload

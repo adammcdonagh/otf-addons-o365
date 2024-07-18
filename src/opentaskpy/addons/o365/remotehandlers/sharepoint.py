@@ -90,7 +90,6 @@ class SharepointTransfer(RemoteTransferHandler):
         """Handle the cacheable variables."""
         # Obtain the "updated" value from the spec
         for cacheable_variable in self.spec["cacheableVariables"]:
-
             updated_value = self.obtain_variable_from_spec(
                 cacheable_variable["variableName"], self.spec
             )
@@ -101,16 +100,82 @@ class SharepointTransfer(RemoteTransferHandler):
         """Return False, as all files should go via the worker."""
         return False
 
-    def handle_post_copy_action(self, files: list[str]) -> int:
+    def handle_post_copy_action(self, files: dict) -> int:
         """Handle the post copy action specified in the config.
 
         Args:
-            files (list[str]): A list of files that need to be handled.
+            files (dict): A list of files that need to be handled.
 
         Returns:
             int: 0 if successful, 1 if not.
         """
-        raise NotImplementedError
+        # Check that our creds are valid
+        self.validate_or_refresh_creds()
+
+        # Determine the action to take
+        # Delete the files
+        if self.spec["postCopyAction"]["action"] == "delete":
+            self.logger.info(f"Deleting files: {files}")
+            # No way to bulk delete items from Sharepoint (it seems), so remove each individually
+            for file_name, attributes in files.items():
+                # Build up file path below site root
+                file_path = f"{attributes['directory']}/{file_name}"
+                # Get the file id and delete
+                file_id = self.get_file_id_from_path(file_path)
+                delete_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{file_id}"
+                response = requests.delete(
+                    delete_url,
+                    headers={
+                        "Authorization": "Bearer " + self.credentials["access_token"],
+                    },
+                    timeout=60,
+                )
+                if response.status_code != 204:
+                    self.logger.error(f"Failed to delete file: {file_name}")
+                    self.logger.error(f"Got return code: {response.status_code}")
+                    self.logger.error(response.json())
+                    return 1
+        # Copy the files to the new location, and then delete the originals
+        if (
+            self.spec["postCopyAction"]["action"] == "move"
+            or self.spec["postCopyAction"]["action"] == "rename"
+        ):
+            for file_name, attributes in files.items():
+                # Build up file path below site root
+                file_path = f"{attributes['directory']}/{file_name}"
+                file_id = self.get_file_id_from_path(file_path)
+                new_file = f"{file_name.split('/')[-1]}"
+                # Fetch id of new parent item from spec destination field
+                destination_id = self.get_file_id_from_path(
+                    self.spec["postCopyAction"]["destination"]
+                )
+                # Determine if we are renaming file
+                if self.spec["postCopyAction"]["action"] == "rename":
+                    # Use the pattern and sub values to rename the file correctly
+                    new_file = re.sub(
+                        self.spec["postCopyAction"]["pattern"],
+                        self.spec["postCopyAction"]["sub"],
+                        file_name,
+                    )
+                update_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{file_id}"
+                response = requests.patch(
+                    update_url,
+                    headers={
+                        "Authorization": "Bearer " + self.credentials["access_token"],
+                        "Content-Type": "application/json",
+                    },
+                    timeout=60,
+                    json={
+                        "parentReference": {"id": f"{destination_id}"},
+                        "name": f"{new_file}",
+                    },
+                )
+                if response.status_code != 200:
+                    self.logger.error(f"Failed to move file: {file_name}")
+                    self.logger.error(f"Got return code: {response.status_code}")
+                    self.logger.error(response.json())
+                    return 1
+        return 0
 
     def list_files(
         self, directory: str | None = None, file_pattern: str | None = None
@@ -133,7 +198,6 @@ class SharepointTransfer(RemoteTransferHandler):
         )
 
         try:  # pylint: disable=too-many-nested-blocks
-
             # Build the path, depending if the directory is just "/" or "" or has a full path
             path = ""
             if (directory and directory == "/") or not directory:
@@ -179,6 +243,7 @@ class SharepointTransfer(RemoteTransferHandler):
                         remote_files[file_name] = {
                             "size": size,
                             "modified_time": last_modified.timestamp(),
+                            "directory": directory,
                         }
                 else:
                     break
@@ -271,9 +336,7 @@ class SharepointTransfer(RemoteTransferHandler):
 
         return result
 
-    def pull_files_to_worker(
-        self, files: list[str], local_staging_directory: str
-    ) -> int:
+    def pull_files_to_worker(self, files: dict, local_staging_directory: str) -> int:
         """Pull files to the worker.
 
         Download files from Sharepoint to the local staging directory.
@@ -286,7 +349,45 @@ class SharepointTransfer(RemoteTransferHandler):
         Returns:
             int: 0 if successful, 1 if not.
         """
-        raise NotImplementedError
+        # Check that our creds are valid
+        self.validate_or_refresh_creds()
+
+        result = 0
+        for file_name, attributes in files.items():
+            # Build up file path below site root
+            file_path = f"{attributes['directory']}/{file_name}"
+
+            try:
+                # Get the item id based on source path
+                file_id = self.get_file_id_from_path(file_path)
+                # Download file using item id
+                self.logger.info(f"Downloading file: {file_name}")
+                download_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{file_id}/content"
+                response = requests.get(
+                    download_url,
+                    headers={
+                        "Authorization": "Bearer " + self.credentials["access_token"],
+                    },
+                    timeout=60,
+                )
+
+                # Check the response was a success
+                if response.status_code not in (200, 201):
+                    self.logger.error(f"Failed to download file: {file_name}")
+                    self.logger.error(f"Got return code: {response.status_code}")
+                    self.logger.error(response.json())
+                    result = 1
+                else:
+                    local_file_name = f"{local_staging_directory}/{file_name}"
+                    with open(local_file_name, "wb") as local_file:
+                        local_file.write(response.content)
+                    self.logger.info("Successfully downloaded file")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                self.logger.error(f"Failed to transfer file: {file_name}")
+                self.logger.exception(e)
+                result = 1
+
+        return result
 
     def transfer_files(
         self,
@@ -303,3 +404,28 @@ class SharepointTransfer(RemoteTransferHandler):
 
     def tidy(self) -> None:
         """Nothing to tidy."""
+
+    def get_file_id_from_path(self, file_path: str) -> str:
+        """Returns the id for a sharepoint drive item from the path."""
+        item_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_path}"
+        response = requests.get(
+            item_url,
+            headers={
+                "Authorization": "Bearer " + self.credentials["access_token"],
+            },
+            timeout=60,
+        )
+        # Check the response was a success
+        if response.status_code != 200:
+            self.logger.error(f"Failed to get id for item with path: {file_path}")
+            self.logger.error(f"Got return code: {response.status_code}")
+            self.logger.error(response.json())
+            raise RemoteTransferError(
+                f"Failed to get id for item with path: {file_path}"
+            )
+
+        if response.json()["id"]:
+            self.logger.info(f"Successfully fetched id for item with path: {file_path}")
+            return str(response.json()["id"])
+
+        raise RemoteTransferError(f"Failed to get id for item with path: {file_path}")
