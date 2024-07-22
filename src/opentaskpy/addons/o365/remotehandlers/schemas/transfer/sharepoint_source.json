@@ -27,6 +27,13 @@
     },
     "protocol": {
       "$ref": "sharepoint_source/protocol.json"
+    },
+    "cacheableVariables": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "oneOf": [{ "$ref": "http://localhost/cacheable_variables.json" }]
+      }
     }
   },
   "additionalProperties": false,
