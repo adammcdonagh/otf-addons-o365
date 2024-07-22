@@ -2,7 +2,7 @@
 
 ## v24.30.0
 
-- Add cacheableVariables to sharepoint source schema
+- Add cacheableVariables to sharepoint source schema.
 
 ## v24.29.0
 
