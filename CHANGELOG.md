@@ -1,5 +1,9 @@
 # Changelog
 
+## v24.44.0
+
+- Add retry logic for 409 errors when uploading files to Sharepoint
+
 ## v24.30.0
 
 - Add cacheableVariables to sharepoint source schema.
