@@ -3,6 +3,7 @@
 import glob
 import re
 from datetime import datetime
+from time import sleep
 
 import opentaskpy.otflogging
 import requests
@@ -313,15 +314,32 @@ class SharepointTransfer(RemoteTransferHandler):
 
             upload_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_name}:/content"
             with open(file, "rb") as f:
-                response = requests.put(
-                    upload_url,
-                    headers={
-                        "Authorization": "Bearer " + self.credentials["access_token"],
-                        "Content-Type": "application/json",
-                    },
-                    data=f,
-                    timeout=60,
-                )
+                max_retries = 5
+                retry_delay = 1
+
+                for attempt in range(max_retries):
+                    response = requests.put(
+                        upload_url,
+                        headers={
+                            "Authorization": "Bearer "
+                            + self.credentials["access_token"],
+                            "Content-Type": "application/json",
+                        },
+                        data=f,
+                        timeout=60,
+                    )
+                    if response.status_code != 409:
+                        break
+                    if attempt < max_retries - 1:
+                        sleep_time = retry_delay * (2**attempt)
+                        self.logger.info(
+                            f"Got 409 error from API. Sleeping for {sleep_time} seconds before retrying. Attempt {attempt} of {max_retries}"
+                        )
+                        sleep(sleep_time)
+                else:
+                    self.logger.error(
+                        f"Failed to upload file after {max_retries} attempts due to 409 error"
+                    )
 
                 # Check the response was a success
                 if response.status_code not in (200, 201):
