@@ -101,6 +101,49 @@ class SharepointTransfer(RemoteTransferHandler):
         """Return False, as all files should go via the worker."""
         return False
 
+    def create_or_get_folder(self, destination_path: str) -> str:
+        """Create a folder if it does not exist and return its ID or get folder ID if it exists.
+
+        Args:
+            destination_path(str): destination folder path
+        Returns:
+            folder ID or empty string if creation is unsuccessful
+        """
+        path_parts = destination_path.split("/")  # splitting the file path
+        root = path_parts[
+            0
+        ]  # starting with root folder to create the subsequent folder if they don't exist
+        folder_id = None
+        for part in path_parts[1:]:
+            current_path = f"{root}:/{part}"
+            # check if current folder exists
+            folder_id = self.get_file_id_from_path(current_path)
+
+            if not folder_id:
+                create_folder_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{current_path}/children"
+
+                response = requests.post(
+                    create_folder_url,
+                    headers={
+                        "Authorization": "Bearer " + self.credentials["access_token"],
+                        "Content-Type": "application/json",
+                    },
+                    timeout=60,
+                    json={
+                        "name": part,
+                        "folder": {},
+                        "parentReference": {"id": current_path},
+                    },
+                )
+                if response.status_code != 201:
+                    self.logger.error(f"Failed to create folder: {part}")
+                    self.logger.error(response.json())
+                    raise RemoteTransferError(f"Failed to create folder: {part}")
+                folder_id = response.json().get("id")
+        if folder_id is None:
+            return ""
+        return folder_id
+
     def handle_post_copy_action(self, files: dict) -> int:
         """Handle the post copy action specified in the config.
 
@@ -145,11 +188,19 @@ class SharepointTransfer(RemoteTransferHandler):
                 # Build up file path below site root
                 file_path = f"{attributes['directory']}/{file_name}"
                 file_id = self.get_file_id_from_path(file_path)
-                new_file = f"{file_name.split('/')[-1]}"
+                new_file = f"{file_name.split('/')[-1]}"  # ensures the file name is copied properly - T
+
+                # getting the archiving path
+                destination_path = self.spec["postCopyAction"]["destination"]
+
                 # Fetch id of new parent item from spec destination field
-                destination_id = self.get_file_id_from_path(
-                    self.spec["postCopyAction"]["destination"]
-                )
+                destination_id = self.create_or_get_folder(destination_path)
+
+                if not destination_id:
+                    self.logger.error(
+                        f"Failed to get or create destination folder for {destination_path}"
+                    )
+                    return 1
                 # Determine if we are renaming file
                 if self.spec["postCopyAction"]["action"] == "rename":
                     # Use the pattern and sub values to rename the file correctly
