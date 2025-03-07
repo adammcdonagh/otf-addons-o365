@@ -91,6 +91,49 @@ sharepoint_filewatch_task_definition_source = {
     ],
 }
 
+sharepoint_destination_non_existent = {
+    "siteHostname": None,
+    "siteName": None,
+    "directory": "dest/archive/anotherFolder/testFolder",
+    "protocol": {
+        "name": "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer",
+        "refreshToken": "",
+        "clientId": None,
+        "tenantId": None,
+    },
+    "cacheableVariables": [
+        {
+            "variableName": "protocol.refreshToken",
+            "cachingPlugin": "file",
+            "cacheArgs": {
+                "file": None,
+            },
+        }
+    ],
+}
+
+sharepoint_source_definition_dest = {
+    "siteHostname": None,
+    "siteName": None,
+    "directory": "dest",
+    "fileRegex": "^pca_move_recursive.txt$",
+    "protocol": {
+        "name": "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer",
+        "refreshToken": "",
+        "clientId": None,
+        "tenantId": None,
+    },
+    "cacheableVariables": [
+        {
+            "variableName": "protocol.refreshToken",
+            "cachingPlugin": "file",
+            "cacheArgs": {
+                "file": None,
+            },
+        }
+    ],
+}
+
 
 """
 These tests are hard to fully automate, given a full set of creds are needed for the environment.
@@ -248,6 +291,52 @@ def test_local_to_sharepoint_transfer(tmpdir, o365_creds):
         f.write("test")
 
     transfer_obj = transfer.Transfer(None, "local-to-sharepoint-copy", task_definition)
+
+    assert transfer_obj.run()
+
+
+def test_sharepoint_pca_move_recursive(tmpdir, o365_creds):
+    # Upload file first to ensure present before we move
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(local_source_definition),
+        "destination": [deepcopy(sharepoint_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the directory to the temp directory
+    task_definition["source"]["directory"] = tmpdir
+    task_definition["source"]["fileRegex"] = "^pca_move_recursive2.txt$"
+    task_definition["destination"][0]["directory"] = "dest"
+
+    # Create a file in the tmpdir
+    with open(f"{tmpdir}/pca_move_recursive2.txt", "w") as f:
+        f.write("pca_move_recursive")
+
+    transfer_obj = transfer.Transfer(None, "local-to-sharepoint-copy", task_definition)
+    transfer_obj.run()
+
+    # Then attempt transfer with sharepoint source with PCA move
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(sharepoint_source_definition_dest),
+        "destination": [deepcopy(local_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the destination directory to the temp directory
+    task_definition["destination"][0]["directory"] = tmpdir.strpath
+
+    # Set the PCA with move
+    task_definition["source"]["directory"] = "dest"
+    task_definition["source"]["fileRegex"] = "^pca_move_recursive2.txt$"
+    task_definition["source"]["postCopyAction"] = {
+        "action": "move",
+        "destination": "new_folder/another_folder/final_folder",
+    }
+    transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
 
     assert transfer_obj.run()
 

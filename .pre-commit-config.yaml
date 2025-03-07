@@ -62,10 +62,10 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: mypy
+        entry: /usr/local/bin/python
         language: python
         types: [python]
-        args: ["--config-file", "mypy.ini"]
+        args: ["-m", "mypy", "--config-file", "mypy.ini"]
         require_serial: true
         files: ^src/opentaskpy/.+\.py$
       - id: pylint

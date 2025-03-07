@@ -101,48 +101,36 @@ class SharepointTransfer(RemoteTransferHandler):
         """Return False, as all files should go via the worker."""
         return False
 
-    def create_or_get_folder(self, destination_path: str) -> str:
-        """Create a folder if it does not exist and return its ID or get folder ID if it exists.
+    def create_folder(self, parent_id: str | None, folder: str) -> str:
+        """Create a folder and return its ID.
 
         Args:
-            destination_path(str): destination folder path
+            parent_id (str): parent folder id
+            folder (str): folder for the creation
         Returns:
             folder ID or empty string if creation is unsuccessful
         """
-        path_parts = destination_path.split("/")  # splitting the file path
-        root = path_parts[
-            0
-        ]  # starting with root folder to create the subsequent folder if they don't exist
-        folder_id = None
-        for part in path_parts[1:]:
-            current_path = f"{root}:/{part}"
-            # check if current folder exists
-            folder_id = self.get_file_id_from_path(current_path)
+        # check if this is root folder or not
+        if parent_id is None:
+            create_folder_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root/children"
+        else:
+            create_folder_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{parent_id}/children"
+        response = requests.post(
+            create_folder_url,
+            headers={
+                "Authorization": "Bearer " + self.credentials["access_token"],
+                "Content-Type": "application/json",
+            },
+            timeout=60,
+            json={"name": folder, "folder": {}},
+        )
+        if response.status_code != 201:
+            self.logger.error(f"Failed to create folder: {folder}")
+            self.logger.error(response.json())
+            raise RemoteTransferError(f"Failed to create folder: {folder}")
 
-            if not folder_id:
-                create_folder_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{current_path}/children"
-
-                response = requests.post(
-                    create_folder_url,
-                    headers={
-                        "Authorization": "Bearer " + self.credentials["access_token"],
-                        "Content-Type": "application/json",
-                    },
-                    timeout=60,
-                    json={
-                        "name": part,
-                        "folder": {},
-                        "parentReference": {"id": current_path},
-                    },
-                )
-                if response.status_code != 201:
-                    self.logger.error(f"Failed to create folder: {part}")
-                    self.logger.error(response.json())
-                    raise RemoteTransferError(f"Failed to create folder: {part}")
-                folder_id = response.json().get("id")
-        if folder_id is None:
-            return ""
-        return folder_id
+        self.logger.info(f"Successfully created folder: {folder}")
+        return str(response.json().get("id"))
 
     def handle_post_copy_action(self, files: dict) -> int:
         """Handle the post copy action specified in the config.
@@ -188,12 +176,12 @@ class SharepointTransfer(RemoteTransferHandler):
                 # Build up file path below site root
                 file_path = f"{attributes['directory']}/{file_name}"
                 file_id = self.get_file_id_from_path(file_path)
-                new_file = f"{file_name.split('/')[-1]}"  # ensures the file name is copied properly - T
+                new_file = f"{file_name.split('/')[-1]}"
 
                 # getting the archiving path
                 destination_path = self.spec["postCopyAction"]["destination"]
 
-                # Fetch id of new parent item from spec destination field
+                # Fetch id of destination folder from spec destination field
                 destination_id = self.create_or_get_folder(destination_path)
 
                 if not destination_id:
@@ -228,6 +216,35 @@ class SharepointTransfer(RemoteTransferHandler):
                     self.logger.error(response.json())
                     return 1
         return 0
+
+    def create_or_get_folder(self, destination_path: str) -> str:
+        """Create a folder if it does not exist and return its ID or get folder ID if it exists.
+
+        Args:
+            destination_path(str): destination folder path
+        Returns:
+            folder ID or empty string if creation is unsuccessful
+        """
+        folders = destination_path.split("/")
+        current_parent = ""
+        parent_id = None  # if root folder exists, no need for parent ID
+        for folder in folders:
+            # starting from first(root) folder and checking if it exists
+            current_path = f"{current_parent}/{folder}" if current_parent else folder
+            # check if current folder exists
+            folder_id = self.get_file_id_from_path(current_path)
+
+            if not folder_id:
+                self.logger.info(f"Folder {current_path} does not exist, creating")
+                folder_id = self.create_folder(parent_id, folder)
+                current_parent = current_path
+                parent_id = folder_id
+            else:
+                # updating the current parent for the next folder in sequence
+                current_parent = current_path
+                parent_id = folder_id
+
+        return folder_id
 
     def list_files(
         self, directory: str | None = None, file_pattern: str | None = None
@@ -372,8 +389,9 @@ class SharepointTransfer(RemoteTransferHandler):
                     response = requests.put(
                         upload_url,
                         headers={
-                            "Authorization": "Bearer "
-                            + self.credentials["access_token"],
+                            "Authorization": (
+                                "Bearer " + self.credentials["access_token"]
+                            ),
                             "Content-Type": "application/json",
                         },
                         data=f,
@@ -489,9 +507,7 @@ class SharepointTransfer(RemoteTransferHandler):
             self.logger.error(f"Failed to get id for item with path: {file_path}")
             self.logger.error(f"Got return code: {response.status_code}")
             self.logger.error(response.json())
-            raise RemoteTransferError(
-                f"Failed to get id for item with path: {file_path}"
-            )
+            return ""
 
         if response.json()["id"]:
             self.logger.info(f"Successfully fetched id for item with path: {file_path}")
