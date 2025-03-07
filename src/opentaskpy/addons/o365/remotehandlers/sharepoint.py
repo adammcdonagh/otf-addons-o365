@@ -235,7 +235,7 @@ class SharepointTransfer(RemoteTransferHandler):
             folder_id = self.get_file_id_from_path(current_path)
 
             if not folder_id:
-                self.logger.info(f"Folder {current_path} does not exist, creating")
+                self.logger.info(f"Folder {folder} does not exist, creating")
                 folder_id = self.create_folder(parent_id, folder)
                 current_parent = current_path
                 parent_id = folder_id

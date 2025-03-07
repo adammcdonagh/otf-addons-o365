@@ -91,26 +91,6 @@ sharepoint_filewatch_task_definition_source = {
     ],
 }
 
-sharepoint_destination_non_existent = {
-    "siteHostname": None,
-    "siteName": None,
-    "directory": "dest/archive/anotherFolder/testFolder",
-    "protocol": {
-        "name": "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer",
-        "refreshToken": "",
-        "clientId": None,
-        "tenantId": None,
-    },
-    "cacheableVariables": [
-        {
-            "variableName": "protocol.refreshToken",
-            "cachingPlugin": "file",
-            "cacheArgs": {
-                "file": None,
-            },
-        }
-    ],
-}
 
 sharepoint_source_definition_dest = {
     "siteHostname": None,
@@ -307,11 +287,11 @@ def test_sharepoint_pca_move_recursive(tmpdir, o365_creds):
 
     # Set the directory to the temp directory
     task_definition["source"]["directory"] = tmpdir
-    task_definition["source"]["fileRegex"] = "^pca_move_recursive2.txt$"
+    task_definition["source"]["fileRegex"] = "^pca_move_recursive3.txt$"
     task_definition["destination"][0]["directory"] = "dest"
 
     # Create a file in the tmpdir
-    with open(f"{tmpdir}/pca_move_recursive2.txt", "w") as f:
+    with open(f"{tmpdir}/pca_move_recursive3.txt", "w") as f:
         f.write("pca_move_recursive")
 
     transfer_obj = transfer.Transfer(None, "local-to-sharepoint-copy", task_definition)
@@ -331,10 +311,10 @@ def test_sharepoint_pca_move_recursive(tmpdir, o365_creds):
 
     # Set the PCA with move
     task_definition["source"]["directory"] = "dest"
-    task_definition["source"]["fileRegex"] = "^pca_move_recursive2.txt$"
+    task_definition["source"]["fileRegex"] = "^pca_move_recursive3.txt$"
     task_definition["source"]["postCopyAction"] = {
         "action": "move",
-        "destination": "new_folder/another_folder/final_folder",
+        "destination": "test_folder/another_folder/last_folder",
     }
     transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
 
