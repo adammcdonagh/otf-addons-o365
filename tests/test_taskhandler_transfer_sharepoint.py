@@ -314,7 +314,7 @@ def test_sharepoint_pca_move_recursive(tmpdir, o365_creds):
     task_definition["source"]["fileRegex"] = "^pca_move_recursive3.txt$"
     task_definition["source"]["postCopyAction"] = {
         "action": "move",
-        "destination": "test_folder/another_folder/last_folder",
+        "destination": "test_folder_archive/another_folder",
     }
     transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
 

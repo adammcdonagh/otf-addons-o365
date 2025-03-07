@@ -229,21 +229,20 @@ class SharepointTransfer(RemoteTransferHandler):
         current_parent = ""
         parent_id = None  # if root folder exists, no need for parent ID
         for folder in folders:
-            # starting from first(root) folder and checking if it exists
+            # build the path depending on if parent exists
             current_path = f"{current_parent}/{folder}" if current_parent else folder
-            # check if current folder exists
+            # get folder id from current path
             folder_id = self.get_file_id_from_path(current_path)
 
+            # if folder doesn't exist, create it; else, update parent details
             if not folder_id:
                 self.logger.info(f"Folder {folder} does not exist, creating")
                 folder_id = self.create_folder(parent_id, folder)
-                current_parent = current_path
-                parent_id = folder_id
-            else:
-                # updating the current parent for the next folder in sequence
-                current_parent = current_path
-                parent_id = folder_id
+            # updating parent info for the next folder in sequence
+            current_parent = current_path
+            parent_id = folder_id
 
+            # return the last folder_id in path
         return folder_id
 
     def list_files(
