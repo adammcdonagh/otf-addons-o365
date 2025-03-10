@@ -287,11 +287,11 @@ def test_sharepoint_pca_move_recursive(tmpdir, o365_creds):
 
     # Set the directory to the temp directory
     task_definition["source"]["directory"] = tmpdir
-    task_definition["source"]["fileRegex"] = "^pca_move_recursive3.txt$"
+    task_definition["source"]["fileRegex"] = "^pca_move_recursive4.txt$"
     task_definition["destination"][0]["directory"] = "dest"
 
     # Create a file in the tmpdir
-    with open(f"{tmpdir}/pca_move_recursive3.txt", "w") as f:
+    with open(f"{tmpdir}/pca_move_recursive4.txt", "w") as f:
         f.write("pca_move_recursive")
 
     transfer_obj = transfer.Transfer(None, "local-to-sharepoint-copy", task_definition)
@@ -311,10 +311,10 @@ def test_sharepoint_pca_move_recursive(tmpdir, o365_creds):
 
     # Set the PCA with move
     task_definition["source"]["directory"] = "dest"
-    task_definition["source"]["fileRegex"] = "^pca_move_recursive3.txt$"
+    task_definition["source"]["fileRegex"] = "^pca_move_recursive4.txt$"
     task_definition["source"]["postCopyAction"] = {
         "action": "move",
-        "destination": "test_folder_archive/another_folder",
+        "destination": "testing_7/testing_8",
     }
     transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
 

@@ -217,7 +217,7 @@ class SharepointTransfer(RemoteTransferHandler):
                     return 1
         return 0
 
-    def create_or_get_folder(self, destination_path: str) -> str:
+    def create_or_get_folder(self, destination_path: str) -> str | None:
         """Create a folder if it does not exist and return its ID or get folder ID if it exists.
 
         Args:
@@ -235,7 +235,7 @@ class SharepointTransfer(RemoteTransferHandler):
             folder_id = self.get_file_id_from_path(current_path)
 
             # if folder doesn't exist, create it; else, update parent details
-            if not folder_id:
+            if folder_id is None:
                 self.logger.info(f"Folder {folder} does not exist, creating")
                 folder_id = self.create_folder(parent_id, folder)
             # updating parent info for the next folder in sequence
@@ -491,7 +491,7 @@ class SharepointTransfer(RemoteTransferHandler):
     def tidy(self) -> None:
         """Nothing to tidy."""
 
-    def get_file_id_from_path(self, file_path: str) -> str:
+    def get_file_id_from_path(self, file_path: str) -> str | None:
         """Returns the id for a sharepoint drive item from the path."""
         item_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_path}"
         response = requests.get(
@@ -506,7 +506,7 @@ class SharepointTransfer(RemoteTransferHandler):
             self.logger.error(f"Failed to get id for item with path: {file_path}")
             self.logger.error(f"Got return code: {response.status_code}")
             self.logger.error(response.json())
-            return ""
+            return None
 
         if response.json()["id"]:
             self.logger.info(f"Successfully fetched id for item with path: {file_path}")
