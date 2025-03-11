@@ -2,10 +2,10 @@
   "python.testing.unittestArgs": ["-v", "-s", "tests", "-p", "test_*.py"],
   "python.defaultInterpreterPath": "/usr/local/bin/python",
   "python.testing.unittestEnabled": false,
-  "python.testing.pytestArgs": ["."],
+  "python.testing.pytestArgs": ["tests"],
   "python.analysis.typeCheckingMode": "off",
   "black-formatter.args": ["--preview"],
-  "files.autoSave": "off", // needed for editor.formatOnSave
+  "files.autoSave": "afterDelay", // needed for editor.formatOnSave
   "files.insertFinalNewline": true, // needed for pre-commit check
   "files.trimTrailingWhitespace": true,
   "editor.formatOnSave": true,

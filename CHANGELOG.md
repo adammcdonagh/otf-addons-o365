@@ -1,5 +1,9 @@
 # Changelog
 
+## v25.9.0
+
+- Add recursive folder creation in Sharepoint
+
 ## v24.44.0
 
 - Add retry logic for 409 errors when uploading files to Sharepoint
