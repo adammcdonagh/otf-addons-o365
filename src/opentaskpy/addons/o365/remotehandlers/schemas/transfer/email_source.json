@@ -1,0 +1,28 @@
+{
+  "$id": "http://localhost/transfer/email_source.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "sourceEmailAddress": {
+      "type": "string"
+    },
+    "sender": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "protocol": {
+      "$ref": "email_source/protocol.json"
+    },
+    "cacheableVariables": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "oneOf": [{ "$ref": "http://localhost/cacheable_variables.json" }]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": ["sourceEmailAddress", "sender", "subject", "protocol"]
+}

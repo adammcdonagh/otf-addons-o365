@@ -20,7 +20,7 @@ def get_access_token(credentials: dict) -> dict:
 
     logger = opentaskpy.otflogging.init_logging(__name__, None, None)
 
-    scopes = ["Sites.ReadWrite.All"]
+    scopes = ["Sites.ReadWrite.All", "Mail.ReadWrite"]
 
     # Check for a refresh token. If one is not present, then we need to get one,
     # which requires going through a different flow with msal and prompting for the

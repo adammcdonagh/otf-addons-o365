@@ -1,0 +1,22 @@
+{
+  "$id": "http://localhost/transfer/email_source/protocol.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "enum": ["opentaskpy.addons.o365.remotehandlers.email.EmailTransfer"]
+    },
+    "refreshToken": {
+      "type": "string"
+    },
+    "clientId": {
+      "type": "string"
+    },
+    "tenantId": {
+      "type": "string"
+    }
+  },
+  "required": ["name", "refreshToken", "clientId", "tenantId"],
+  "additionalProperties": false
+}
