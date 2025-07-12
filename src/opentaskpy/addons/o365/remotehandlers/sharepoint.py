@@ -1,6 +1,7 @@
 """O365 Sharepoint remote handler."""
 
 import glob
+import math
 import re
 from datetime import datetime
 from os import path
