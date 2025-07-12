@@ -283,9 +283,9 @@ def test_local_to_sharepoint_transfer_large_file(tmpdir, o365_creds):
     random = randint(1000, 9999)
 
     # Create a large file
-    subprocess.run(
-        ["dd", "if=/dev/urandom", f"of={tmpdir}/{random}.bin", "bs=1M", "count=110"]
-    )
+    large_file_path = f"{tmpdir}/{random}.bin"
+    with open(large_file_path, "wb") as f:
+        f.write(os.urandom(110 * 1024 * 1024))  # 110 MB of random data
 
     task_definition = {
         "type": "transfer",
