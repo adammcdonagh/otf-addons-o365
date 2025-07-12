@@ -486,7 +486,7 @@ class SharepointTransfer(RemoteTransferHandler):
             # Determine the number of chunks
             file_size = path.getsize(file)
             chunk_size_max = 50000000
-            num_chunks = int(file_size / chunk_size_max) + 1
+            num_chunks = math.ceil(file_size / chunk_size_max)
 
             for i in range(num_chunks):
                 # Get the range of the chunk
