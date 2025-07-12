@@ -1,5 +1,9 @@
 # Changelog
 
+## v25.27.0
+
+- Change file uploads > 200MB to use upload sessions.
+
 ## v25.9.0
 
 - Add recursive folder creation in Sharepoint

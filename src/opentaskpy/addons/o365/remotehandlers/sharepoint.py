@@ -1,8 +1,10 @@
 """O365 Sharepoint remote handler."""
 
 import glob
+import math
 import re
 from datetime import datetime
+from os import path
 from time import sleep
 
 import opentaskpy.otflogging
@@ -267,13 +269,13 @@ class SharepointTransfer(RemoteTransferHandler):
 
         try:  # pylint: disable=too-many-nested-blocks
             # Build the path, depending if the directory is just "/" or "" or has a full path
-            path = ""
+            dest_path = ""
             if (directory and directory == "/") or not directory:
-                path = "root/children"
+                dest_path = "root/children"
             elif directory:
-                path = f"root:/{directory}:/children"
+                dest_path = f"root:/{directory}:/children"
 
-            url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/{path}"
+            url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/{dest_path}"
 
             while True:
                 # Check that our creds are valid
@@ -379,6 +381,13 @@ class SharepointTransfer(RemoteTransferHandler):
                 f"Uploading file: {file} to site {self.spec['siteName']} with path: {file_name}"
             )
 
+            # Uploads should use an upload session if the file is > 200MB in size
+            # Determine size of the file
+            file_size = path.getsize(file)
+            if file_size > 200000000:
+                return self._do_upload_session(file, file_name)
+
+            # Otherwise do a normal upload
             upload_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_name}:/content"
             with open(file, "rb") as f:
                 max_retries = 5
@@ -421,6 +430,112 @@ class SharepointTransfer(RemoteTransferHandler):
                     )
 
         return result
+
+    def _do_upload_session(self, file: str, file_name: str) -> int:
+        """Upload a file using an upload session.
+
+        Args:
+            file (str): The file to upload.
+            file_name (str): The name of the file to upload.
+
+        Returns:
+            int: 0 if successful, 1 if not.
+        """
+        # To perform an upload session correctly, we need to:
+        # 1. Determine if the file already exists
+        # 2. If it does, get the parent item id
+        # 3. Trigger the appropriate URI endpoint to upload the file
+
+        # Determine if the file already exists
+        file_id = self.get_file_id_from_path(file_name)
+        if file_id is None:
+            self.logger.info(f"File {file_name} does not already exist.")
+            # Get the parent item id, using the dirname of the file
+            parent_folder_id = self.get_file_id_from_path(path.dirname(file_name))
+            file_name_basename = path.basename(file_name)
+
+            upload_session_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{parent_folder_id}:/{file_name_basename}:/createUploadSession"
+
+        else:
+            self.logger.info(f"File {file_name} already exists. Replacing file.")
+            upload_session_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{file_id}/createUploadSession"
+
+        response = requests.post(
+            upload_session_url,
+            headers={
+                "Authorization": "Bearer " + self.credentials["access_token"],
+                "Content-Type": "application/json",
+            },
+            timeout=60,
+        )
+        if response.status_code != 200:
+            self.logger.error(f"Failed to create upload session: {file_name}")
+            self.logger.error(f"Got return code: {response.status_code}")
+            self.logger.error(response.json())
+            return 1
+
+        # Get the upload session id
+        upload_session_url = response.json()["uploadUrl"]
+        self.logger.info(
+            f"Created upload session: {upload_session_url} for file: {file_name}"
+        )
+
+        # Now PUT the file to the upload session url, split the file into 50MB chunks
+        # headers for each chunk need to indicate the Content-Range and Content-Length
+        with open(file, "rb") as f:
+
+            # Determine the number of chunks
+            file_size = path.getsize(file)
+            chunk_size_max = 50000000
+            num_chunks = math.ceil(file_size / chunk_size_max)
+
+            for i in range(num_chunks):
+                # Get the range of the chunk
+                chunk_start = i * chunk_size_max
+                chunk_end = (i + 1) * chunk_size_max - 1
+
+                if i == num_chunks - 1:
+                    if chunk_end >= file_size:
+                        chunk_end = file_size - 1
+
+                chunk_range = f"bytes {chunk_start}-{chunk_end}/{file_size}"
+                self.logger.debug(f"Content-Range: {chunk_range}")
+
+                # Get the headers for the chunk
+                headers = {
+                    "Content-Range": chunk_range,
+                    "Content-Length": str(chunk_end - chunk_start),
+                    "Authorization": "Bearer " + self.credentials["access_token"],
+                }
+
+                # Read the chunk from the file
+                chunk = f.read(chunk_end - chunk_start + 1)
+
+                # PUT the chunk to the upload session url
+                response = requests.put(
+                    upload_session_url,
+                    data=chunk,
+                    headers=headers,
+                    timeout=60,
+                )
+                if response.status_code not in (202, 201, 200):
+                    self.logger.error(f"Failed to upload chunk: {file_name}")
+                    self.logger.error(f"Got return code: {response.status_code}")
+                    self.logger.error(response.json())
+                    return 1
+
+                # If it's a 201, then we are done with the upload
+                if response.status_code == 201 or (
+                    response.status_code == 200 and file_id is not None
+                ):
+                    file_id = response.json()["id"]
+                    self.logger.info(f"Successfully uploaded file. File ID: {file_id}")
+                else:
+                    self.logger.info(f"Uploaded chunk {i + 1} of {num_chunks}")
+
+            self.logger.info(f"Successfully uploaded file: {file_name}")
+
+        return 0
 
     def pull_files_to_worker(self, files: dict, local_staging_directory: str) -> int:
         """Pull files to the worker.
@@ -493,7 +608,13 @@ class SharepointTransfer(RemoteTransferHandler):
 
     def get_file_id_from_path(self, file_path: str) -> str | None:
         """Returns the id for a sharepoint drive item from the path."""
-        item_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_path}"
+        if file_path == "":  # We are dealing with the root folder
+            item_url = (
+                f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root"
+            )
+        else:
+            item_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_path}"
+
         response = requests.get(
             item_url,
             headers={
@@ -503,9 +624,11 @@ class SharepointTransfer(RemoteTransferHandler):
         )
         # Check the response was a success
         if response.status_code != 200:
-            self.logger.error(f"Failed to get id for item with path: {file_path}")
-            self.logger.error(f"Got return code: {response.status_code}")
-            self.logger.error(response.json())
+            self.logger.info(f"Failed to get id for item with path: {file_path}")
+
+            if response.status_code != 404:
+                self.logger.info(f"Got return code: {response.status_code}")
+                self.logger.info(response.json())
             return None
 
         if response.json()["id"]:

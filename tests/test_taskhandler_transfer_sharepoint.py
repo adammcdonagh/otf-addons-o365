@@ -2,7 +2,9 @@
 # ruff: noqa
 # mypy: ignore-errors
 import os
+import subprocess
 from copy import deepcopy
+from random import randint
 
 import pytest
 from dotenv import load_dotenv
@@ -272,6 +274,38 @@ def test_local_to_sharepoint_transfer(tmpdir, o365_creds):
 
     transfer_obj = transfer.Transfer(None, "local-to-sharepoint-copy", task_definition)
 
+    assert transfer_obj.run()
+
+
+def test_local_to_sharepoint_transfer_large_file(tmpdir, o365_creds):
+
+    # Generate a random filename
+    random = randint(1000, 9999)
+
+    # Create a large file
+    large_file_path = f"{tmpdir}/{random}.bin"
+    with open(large_file_path, "wb") as f:
+        f.write(os.urandom(110 * 1024 * 1024))  # 110 MB of random data
+
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(local_source_definition),
+        "destination": [deepcopy(sharepoint_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the directory to the temp directory
+    task_definition["source"]["directory"] = tmpdir
+    task_definition["source"]["fileRegex"] = f"^{random}.bin$"
+
+    transfer_obj = transfer.Transfer(
+        None, "local-to-sharepoint-copy-large-file", task_definition
+    )
+
+    assert transfer_obj.run()
+
+    # Now attempt to upload the same file again, this should use different logic, but still work
     assert transfer_obj.run()
 
 
