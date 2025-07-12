@@ -268,13 +268,13 @@ class SharepointTransfer(RemoteTransferHandler):
 
         try:  # pylint: disable=too-many-nested-blocks
             # Build the path, depending if the directory is just "/" or "" or has a full path
-            path = ""
+            dest_path = ""
             if (directory and directory == "/") or not directory:
-                path = "root/children"
+                dest_path = "root/children"
             elif directory:
-                path = f"root:/{directory}:/children"
+                dest_path = f"root:/{directory}:/children"
 
-            url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/{path}"
+            url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/{dest_path}"
 
             while True:
                 # Check that our creds are valid
@@ -441,7 +441,7 @@ class SharepointTransfer(RemoteTransferHandler):
             int: 0 if successful, 1 if not.
         """
         # To perform an upload session correctly, we need to:
-        # 1. Determine if the file alraedy exists
+        # 1. Determine if the file already exists
         # 2. If it does, get the parent item id
         # 3. Trigger the appropriate URI endpoint to upload the file
 
