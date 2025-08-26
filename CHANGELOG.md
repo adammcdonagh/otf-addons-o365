@@ -1,5 +1,9 @@
 # Changelog
 
+## v25.34.0
+
+- _Fix_ upload session logic to not exit after the first file
+
 ## v25.27.0
 
 - Change file uploads > 200MB to use upload sessions.

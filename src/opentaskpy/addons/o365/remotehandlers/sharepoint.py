@@ -385,7 +385,10 @@ class SharepointTransfer(RemoteTransferHandler):
             # Determine size of the file
             file_size = path.getsize(file)
             if file_size > 200000000:
-                return self._do_upload_session(file, file_name)
+                if self._do_upload_session(file, file_name) != 0:
+                    result = 1
+                # Skip the standard upload logic below, since large file uploads are fully handled by _do_upload_session().
+                continue
 
             # Otherwise do a normal upload
             upload_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_name}:/content"
