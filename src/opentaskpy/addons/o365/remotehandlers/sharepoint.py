@@ -7,9 +7,10 @@ from datetime import datetime
 from os import path
 from time import sleep
 
-import opentaskpy.otflogging
 import requests
 from dateutil.tz import tzlocal
+
+import opentaskpy.otflogging
 from opentaskpy.config.variablecaching import cache_utils
 from opentaskpy.exceptions import RemoteTransferError
 from opentaskpy.remotehandlers.remotehandler import RemoteTransferHandler
@@ -385,7 +386,10 @@ class SharepointTransfer(RemoteTransferHandler):
             # Determine size of the file
             file_size = path.getsize(file)
             if file_size > 200000000:
-                return self._do_upload_session(file, file_name)
+                if not self._do_upload_session(file, file_name):
+                    result = 1
+                # Don't do the rest of the logic, as this is done in the function call.
+                continue
 
             # Otherwise do a normal upload
             upload_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_name}:/content"
