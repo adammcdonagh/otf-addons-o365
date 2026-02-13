@@ -519,7 +519,9 @@ class SharepointTransfer(RemoteTransferHandler):
                     upload_session_url,
                     data=chunk,
                     headers=headers,
-                    timeout=60,
+                    timeout=self.spec["protocol"].get(
+                        "largeFileUploadTimeout", 300
+                    ),  # Use configurable timeout for large file uploads
                 )
                 if response.status_code not in (202, 201, 200):
                     self.logger.error(f"Failed to upload chunk: {file_name}")
