@@ -23,7 +23,7 @@ dev = [
   "pytest-shell",
   "types-requests",
   "types-python-dateutil",
-  "black >= 24.1.1",
+  "black >= 26.1.0",
   "isort",
   "pytest",
   "bumpver",

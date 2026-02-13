@@ -1,5 +1,9 @@
 # Changelog
 
+## v26.6.0
+
+- Add configurable timeout for large file uploads
+
 ## v25.34.0
 
 - _Fix_ upload session logic to not exit after the first file
