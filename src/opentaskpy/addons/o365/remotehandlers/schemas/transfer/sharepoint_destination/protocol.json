@@ -17,6 +17,11 @@
     },
     "tenantId": {
       "type": "string"
+    },
+    "largeFileUploadTimeout": {
+      "type": "integer",
+      "default": 300,
+      "minimum": 1
     }
   },
   "required": ["name", "refreshToken", "clientId", "tenantId"],

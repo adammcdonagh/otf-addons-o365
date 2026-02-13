@@ -28,7 +28,7 @@ local_destination_definition = {
 sharepoint_destination_definition = {
     "siteHostname": None,
     "siteName": None,
-    "directory": "dest",
+    "directory": "Dev/dest",
     "protocol": {
         "name": "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer",
         "refreshToken": "",
@@ -42,6 +42,7 @@ sharepoint_destination_definition = {
             "cacheArgs": {
                 "file": None,
             },
+            "min_cache_age": "600",
         }
     ],
 }
@@ -49,7 +50,7 @@ sharepoint_destination_definition = {
 sharepoint_source_definition = {
     "siteHostname": None,
     "siteName": None,
-    "directory": "src",
+    "directory": "Dev/src",
     "fileRegex": "^test.txt$",
     "protocol": {
         "name": "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer",
@@ -71,7 +72,7 @@ sharepoint_source_definition = {
 sharepoint_filewatch_task_definition_source = {
     "siteHostname": None,
     "siteName": None,
-    "directory": "src",
+    "directory": "Dev/src",
     "fileRegex": ".*\\.txt",
     "protocol": {
         "name": "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer",
@@ -97,7 +98,7 @@ sharepoint_filewatch_task_definition_source = {
 sharepoint_source_definition_dest = {
     "siteHostname": None,
     "siteName": None,
-    "directory": "dest",
+    "directory": "Dev/dest",
     "fileRegex": "^pca_move_recursive.txt$",
     "protocol": {
         "name": "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer",
