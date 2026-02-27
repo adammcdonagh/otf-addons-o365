@@ -23,7 +23,7 @@
       "type": "boolean"
     },
     "conditionals": {
-      "$ref": "http://localhost/transfer/sharepoint_source/conditionals.json"
+      "$ref": "sharepoint_source/conditionals.json"
     },
     "postCopyAction": {
       "$ref": "sharepoint_source/postCopyAction.json"
