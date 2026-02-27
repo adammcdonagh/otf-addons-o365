@@ -1,5 +1,9 @@
 # Changelog
 
+## v26.8.0
+
+- Add conditionals property to sharepoint_source schema
+
 ## v26.6.0
 
 - Add configurable timeout for large file uploads
