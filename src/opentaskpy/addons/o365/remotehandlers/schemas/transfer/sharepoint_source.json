@@ -22,6 +22,9 @@
     "error": {
       "type": "boolean"
     },
+    "conditionals": {
+      "$ref": "sharepoint_source/conditionals.json"
+    },
     "postCopyAction": {
       "$ref": "sharepoint_source/postCopyAction.json"
     },
