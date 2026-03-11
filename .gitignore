@@ -180,3 +180,4 @@ test/testFiles
 test/volume
 creds
 refresh_token*.txt
+.envrc

@@ -365,6 +365,10 @@ class SharepointTransfer(RemoteTransferHandler):
         for file in files:
             # Strip the directory from the file
             file_name = file.split("/")[-1]
+            file_url = self.get_file_id_from_path(
+                self.spec["directory"] + "/" + file_name
+            )
+
             # Handle any rename that might be specified in the spec
             if "rename" in self.spec:
                 rename_regex = self.spec["rename"]["pattern"]
@@ -391,7 +395,8 @@ class SharepointTransfer(RemoteTransferHandler):
                 continue
 
             # Otherwise do a normal upload
-            upload_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_name}:/content"
+            upload_url = f"{file_url}:/content"
+            self.logger.info(f"Using upload url: {upload_url}")
             with open(file, "rb") as f:
                 max_retries = 5
                 retry_delay = 1
@@ -618,7 +623,49 @@ class SharepointTransfer(RemoteTransferHandler):
                 f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root"
             )
         else:
-            item_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_path}"
+            parts = file_path.split("/")
+            file_name = parts[-1]
+            # Remove the filename from the path
+            o365_file_path = "/".join(parts[:-1])
+
+            if o365_file_path.startswith("/"):
+                path_parts = o365_file_path.split("/")
+                # Get the first part of the path, which is the document library name
+                library_name = path_parts[1]
+                # file path then needs to be the rest of the path
+                o365_file_path = "/".join(path_parts[2:])
+
+                # If the path starts with a / then it's a document library, we need to get the id of the document library
+                # Do a GET request to /sites/{siteId}/drives to get the document libraries
+                response = requests.get(
+                    f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drives",
+                    headers={
+                        "Authorization": "Bearer " + self.credentials["access_token"],
+                    },
+                    timeout=60,
+                )
+                if response.status_code != 200:
+                    self.logger.error("Failed to get document libraries")
+                    self.logger.error(response.json())
+                    raise RemoteTransferError("Failed to get document libraries")
+
+                document_libraries = response.json()["value"]
+
+                for document_library in document_libraries:
+                    if document_library["name"] == library_name:
+                        item_path = (
+                            f"{o365_file_path}/{file_name}"
+                            if o365_file_path
+                            else file_name
+                        )
+                        return f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drives/{document_library['id']}/root:/{item_path}"
+
+                self.logger.error(
+                    f"Failed to find document library with name {library_name}"
+                )
+                return None
+
+            return f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{re.sub(r'/+', '/', file_path)}"
 
         response = requests.get(
             item_url,

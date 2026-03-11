@@ -1,5 +1,9 @@
 # Changelog
 
+## v26.10.0
+
+- Add support for document libraries in Sharepoint
+
 ## v26.8.0
 
 - Add conditionals property to sharepoint_source schema

@@ -153,6 +153,7 @@ def o365_creds():
         "sharepointHost": os.getenv("SHAREPOINT_HOST"),
         "refreshToken": os.getenv("REFRESH_TOKEN"),
         "rootDir": f"{current_dir}/../",
+        "document_library": os.getenv("DOCUMENT_LIBRARY"),
     }
 
 
@@ -278,6 +279,33 @@ def test_local_to_sharepoint_transfer(tmpdir, o365_creds):
     assert transfer_obj.run()
 
 
+def test_local_to_sharepoint_transfer_document_library(tmpdir, o365_creds):
+
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(local_source_definition),
+        "destination": [deepcopy(sharepoint_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the directory to the temp directory
+    task_definition["source"]["directory"] = tmpdir
+    task_definition["source"]["fileRegex"] = "^test.txt$"
+
+    task_definition["destination"][0][
+        "directory"
+    ] = f"/{o365_creds['document_library']}/Dev/dest"
+
+    # Create a file in the tmpdir
+    with open(f"{tmpdir}/test.txt", "w") as f:
+        f.write("test")
+
+    transfer_obj = transfer.Transfer(None, "local-to-sharepoint-copy", task_definition)
+
+    assert transfer_obj.run()
+
+
 def test_local_to_sharepoint_transfer_large_file(tmpdir, o365_creds):
 
     # Generate a random filename
@@ -299,6 +327,44 @@ def test_local_to_sharepoint_transfer_large_file(tmpdir, o365_creds):
     # Set the directory to the temp directory
     task_definition["source"]["directory"] = tmpdir
     task_definition["source"]["fileRegex"] = f"^{random}.bin$"
+
+    task_definition["destination"][0]["directory"] = f"Dev/dest/{random}/{random}"
+
+    transfer_obj = transfer.Transfer(
+        None, "local-to-sharepoint-copy-large-file", task_definition
+    )
+
+    assert transfer_obj.run()
+
+    # Now attempt to upload the same file again, this should use different logic, but still work
+    assert transfer_obj.run()
+
+
+def test_local_to_sharepoint_transfer_large_file_document_library(tmpdir, o365_creds):
+
+    # Generate a random filename
+    random = randint(1000, 9999)
+
+    # Create a large file
+    large_file_path = f"{tmpdir}/{random}.bin"
+    with open(large_file_path, "wb") as f:
+        f.write(os.urandom(110 * 1024 * 1024))  # 110 MB of random data
+
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(local_source_definition),
+        "destination": [deepcopy(sharepoint_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the directory to the temp directory
+    task_definition["source"]["directory"] = tmpdir
+    task_definition["source"]["fileRegex"] = f"^{random}.bin$"
+
+    task_definition["destination"][0][
+        "directory"
+    ] = f"/{o365_creds['document_library']}/Dev/dest/{random}/{random}"
 
     transfer_obj = transfer.Transfer(
         None, "local-to-sharepoint-copy-large-file", task_definition
