@@ -154,6 +154,7 @@ def o365_creds():
         "refreshToken": os.getenv("REFRESH_TOKEN"),
         "rootDir": f"{current_dir}/../",
         "document_library": os.getenv("DOCUMENT_LIBRARY"),
+        "source_folder": os.getenv("SOURCE_FOLDER"),
     }
 
 
@@ -245,7 +246,9 @@ def test_sharepoint_filewatch_sub_dir(tmpdir, o365_creds):
     )
 
     # Set the directory to the src sub directory
-    sharepoint_filewatch_task_definition["source"]["directory"] = "src"
+    sharepoint_filewatch_task_definition["source"]["directory"] = o365_creds[
+        "source_folder"
+    ]
     # Set the destination directory to the temp directory
     sharepoint_filewatch_task_definition["destination"][0]["directory"] = tmpdir.strpath
 
@@ -389,7 +392,7 @@ def test_sharepoint_pca_move_recursive(tmpdir, o365_creds):
     # Set the directory to the temp directory
     task_definition["source"]["directory"] = tmpdir
     task_definition["source"]["fileRegex"] = "^pca_move_recursive4.txt$"
-    task_definition["destination"][0]["directory"] = "dest"
+    task_definition["destination"][0]["directory"] = o365_creds["source_folder"]
 
     # Create a file in the tmpdir
     with open(f"{tmpdir}/pca_move_recursive4.txt", "w") as f:
@@ -411,11 +414,13 @@ def test_sharepoint_pca_move_recursive(tmpdir, o365_creds):
     task_definition["destination"][0]["directory"] = tmpdir.strpath
 
     # Set the PCA with move
-    task_definition["source"]["directory"] = "dest"
+    task_definition["source"]["directory"] = o365_creds["source_folder"]
     task_definition["source"]["fileRegex"] = "^pca_move_recursive4.txt$"
     task_definition["source"]["postCopyAction"] = {
         "action": "move",
-        "destination": "testing_7/testing_8",
+        "destination": (
+            o365_creds["source_folder"] + "/pca_move_recursive4/testing_7/testing_8"
+        ),
     }
     transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
 
@@ -480,7 +485,9 @@ def test_sharepoint_pca_delete(tmpdir, o365_creds):
     # Set the directory to the temp directory
     task_definition["source"]["directory"] = tmpdir
     task_definition["source"]["fileRegex"] = "^pca_delete.txt$"
-    task_definition["destination"][0]["directory"] = "src/pca_delete"
+    task_definition["destination"][0]["directory"] = (
+        o365_creds["source_folder"] + "/pca_delete"
+    )
 
     # Create a file in the tmpdir
     with open(f"{tmpdir}/pca_delete.txt", "w") as f:
@@ -502,7 +509,7 @@ def test_sharepoint_pca_delete(tmpdir, o365_creds):
     task_definition["destination"][0]["directory"] = tmpdir.strpath
 
     # Set the PCA with delete
-    task_definition["source"]["directory"] = "src/pca_delete"
+    task_definition["source"]["directory"] = o365_creds["source_folder"] + "/pca_delete"
     task_definition["source"]["fileRegex"] = "^pca_delete.txt$"
     task_definition["source"]["postCopyAction"] = {
         "action": "delete",
@@ -525,7 +532,9 @@ def test_sharepoint_pca_move(tmpdir, o365_creds):
     # Set the directory to the temp directory
     task_definition["source"]["directory"] = tmpdir
     task_definition["source"]["fileRegex"] = "^pca_move.txt$"
-    task_definition["destination"][0]["directory"] = "src/pca_move"
+    task_definition["destination"][0]["directory"] = (
+        o365_creds["source_folder"] + "/pca_move"
+    )
 
     # Create a file in the tmpdir
     with open(f"{tmpdir}/pca_move.txt", "w") as f:
@@ -547,11 +556,11 @@ def test_sharepoint_pca_move(tmpdir, o365_creds):
     task_definition["destination"][0]["directory"] = tmpdir.strpath
 
     # Set the PCA with move
-    task_definition["source"]["directory"] = "src/pca_move"
+    task_definition["source"]["directory"] = o365_creds["source_folder"] + "/pca_move"
     task_definition["source"]["fileRegex"] = "^pca_move.txt$"
     task_definition["source"]["postCopyAction"] = {
         "action": "move",
-        "destination": "archive2",
+        "destination": o365_creds["source_folder"] + "/pca_move/archive2",
     }
     transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
 
@@ -571,7 +580,9 @@ def test_sharepoint_pca_rename(tmpdir, o365_creds):
     # Set the directory to the temp directory
     task_definition["source"]["directory"] = tmpdir
     task_definition["source"]["fileRegex"] = "^pca_rename.txt$"
-    task_definition["destination"][0]["directory"] = "src/pca_rename"
+    task_definition["destination"][0]["directory"] = (
+        o365_creds["source_folder"] + "/pca_rename"
+    )
 
     # Create a file in the tmpdir
     with open(f"{tmpdir}/pca_rename.txt", "w") as f:
@@ -593,11 +604,11 @@ def test_sharepoint_pca_rename(tmpdir, o365_creds):
     task_definition["destination"][0]["directory"] = tmpdir.strpath
 
     # Set the PCA with rename
-    task_definition["source"]["directory"] = "src/pca_rename"
+    task_definition["source"]["directory"] = o365_creds["source_folder"] + "/pca_rename"
     task_definition["source"]["fileRegex"] = "^pca_rename.txt$"
     task_definition["source"]["postCopyAction"] = {
         "action": "rename",
-        "destination": "archive",
+        "destination": o365_creds["source_folder"] + "/pca_rename/archive",
         "pattern": "rename",
         "sub": "renamed",
     }
