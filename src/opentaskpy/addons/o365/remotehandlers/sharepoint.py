@@ -285,7 +285,7 @@ class SharepointTransfer(RemoteTransferHandler):
                 self.logger.info(f"Folder {folder} does not exist, creating")
                 folder_id = self.create_folder(parent_id, folder)
             else:
-                # get_fileurld_from_path returns a path-based URL, not a drive item ID;
+                # get_file_url_from_path returns a path-based URL, not a drive item ID;
                 # resolve it to the actual item ID so it can be used in parentReference.id
                 response = requests.get(
                     folder_url,
