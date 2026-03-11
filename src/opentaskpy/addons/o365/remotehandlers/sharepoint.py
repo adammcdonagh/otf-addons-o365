@@ -154,11 +154,13 @@ class SharepointTransfer(RemoteTransferHandler):
             for file_name, attributes in files.items():
                 # Build up file path below site root
                 file_path = f"{attributes['directory']}/{file_name}"
-                # Get the file id and delete
-                file_id = self.get_file_id_from_path(file_path)
-                delete_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{file_id}"
+                # Get the file url and delete
+                file_url = self.get_file_url_from_path(file_path)
+                if not file_url:
+                    self.logger.error(f"Failed to get file URL for {file_path}")
+                    return 1
                 response = requests.delete(
-                    delete_url,
+                    file_url,
                     headers={
                         "Authorization": "Bearer " + self.credentials["access_token"],
                     },
@@ -177,7 +179,11 @@ class SharepointTransfer(RemoteTransferHandler):
             for file_name, attributes in files.items():
                 # Build up file path below site root
                 file_path = f"{attributes['directory']}/{file_name}"
-                file_id = self.get_file_id_from_path(file_path)
+                file_url = self.get_file_url_from_path(file_path)
+                if not file_url:
+                    self.logger.error(f"Failed to get file URL for {file_path}")
+                    return 1
+
                 new_file = f"{file_name.split('/')[-1]}"
 
                 # getting the archiving path
@@ -199,19 +205,57 @@ class SharepointTransfer(RemoteTransferHandler):
                         self.spec["postCopyAction"]["sub"],
                         file_name,
                     )
-                update_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{file_id}"
+                patch_body = {
+                    "parentReference": {"id": f"{destination_id}"},
+                    "name": f"{new_file}",
+                }
+                patch_headers = {
+                    "Authorization": "Bearer " + self.credentials["access_token"],
+                    "Content-Type": "application/json",
+                }
                 response = requests.patch(
-                    update_url,
-                    headers={
-                        "Authorization": "Bearer " + self.credentials["access_token"],
-                        "Content-Type": "application/json",
-                    },
+                    file_url,
+                    headers=patch_headers,
                     timeout=60,
-                    json={
-                        "parentReference": {"id": f"{destination_id}"},
-                        "name": f"{new_file}",
-                    },
+                    json=patch_body,
                 )
+                if response.status_code == 409:
+                    # Target already exists - delete it and retry (unix-style overwrite)
+                    self.logger.info(
+                        f"Destination file {new_file} already exists, overwriting"
+                    )
+                    conflict_url = self.get_file_url_from_path(
+                        f"{destination_path}/{new_file}"
+                    )
+                    if not conflict_url:
+                        self.logger.error(
+                            f"Failed to get file URL for {destination_path}/{new_file}"
+                        )
+                        return 1
+                    response = requests.delete(
+                        conflict_url,
+                        headers={
+                            "Authorization": (
+                                "Bearer " + self.credentials["access_token"]
+                            ),
+                        },
+                        timeout=60,
+                    )
+                    # Check the response was a success
+                    if response.status_code != 204:
+                        self.logger.error(
+                            f"Failed to delete conflicting file: {new_file}"
+                        )
+                        self.logger.error(f"Got return code: {response.status_code}")
+                        self.logger.error(response.json())
+                        return 1
+
+                    response = requests.patch(
+                        file_url,
+                        headers=patch_headers,
+                        timeout=60,
+                        json=patch_body,
+                    )
                 if response.status_code != 200:
                     self.logger.error(f"Failed to move file: {file_name}")
                     self.logger.error(f"Got return code: {response.status_code}")
@@ -233,13 +277,35 @@ class SharepointTransfer(RemoteTransferHandler):
         for folder in folders:
             # build the path depending on if parent exists
             current_path = f"{current_parent}/{folder}" if current_parent else folder
-            # get folder id from current path
-            folder_id = self.get_file_id_from_path(current_path)
+            # get folder url from current path
+            folder_url = self.get_file_url_from_path(current_path)
 
-            # if folder doesn't exist, create it; else, update parent details
-            if folder_id is None:
+            # if folder doesn't exist, create it and get the actual item ID back
+            if folder_url is None:
                 self.logger.info(f"Folder {folder} does not exist, creating")
                 folder_id = self.create_folder(parent_id, folder)
+            else:
+                # get_file_url_from_path returns a path-based URL, not a drive item ID;
+                # resolve it to the actual item ID so it can be used in parentReference.id
+                response = requests.get(
+                    folder_url,
+                    headers={
+                        "Authorization": "Bearer " + self.credentials["access_token"],
+                    },
+                    timeout=60,
+                )
+                if response.status_code == 404:
+                    self.logger.info(f"Folder {folder} does not exist, creating")
+                    folder_id = self.create_folder(parent_id, folder)
+                elif response.status_code == 200:
+                    folder_id = response.json()["id"]
+                else:
+                    self.logger.error(f"Failed to resolve folder: {current_path}")
+                    self.logger.error(response.json())
+                    raise RemoteTransferError(
+                        f"Failed to resolve folder: {current_path}"
+                    )
+
             # updating parent info for the next folder in sequence
             current_parent = current_path
             parent_id = folder_id
@@ -365,6 +431,10 @@ class SharepointTransfer(RemoteTransferHandler):
         for file in files:
             # Strip the directory from the file
             file_name = file.split("/")[-1]
+            file_url = self.get_file_url_from_path(
+                self.spec["directory"] + "/" + file_name
+            )
+
             # Handle any rename that might be specified in the spec
             if "rename" in self.spec:
                 rename_regex = self.spec["rename"]["pattern"]
@@ -391,7 +461,8 @@ class SharepointTransfer(RemoteTransferHandler):
                 continue
 
             # Otherwise do a normal upload
-            upload_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_name}:/content"
+            upload_url = f"{file_url}:/content"
+            self.logger.info(f"Using upload url: {upload_url}")
             with open(file, "rb") as f:
                 max_retries = 5
                 retry_delay = 1
@@ -450,18 +521,20 @@ class SharepointTransfer(RemoteTransferHandler):
         # 3. Trigger the appropriate URI endpoint to upload the file
 
         # Determine if the file already exists
-        file_id = self.get_file_id_from_path(file_name)
-        if file_id is None:
+        file_url = self.get_file_url_from_path(file_name)
+        if file_url is None:
             self.logger.info(f"File {file_name} does not already exist.")
-            # Get the parent item id, using the dirname of the file
-            parent_folder_id = self.get_file_id_from_path(path.dirname(file_name))
+            # Get the parent item url, using the dirname of the file
+            parent_folder_url = self.get_file_url_from_path(path.dirname(file_name))
             file_name_basename = path.basename(file_name)
 
-            upload_session_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{parent_folder_id}:/{file_name_basename}:/createUploadSession"
+            upload_session_url = (
+                f"{parent_folder_url}:/{file_name_basename}:/createUploadSession"
+            )
 
         else:
             self.logger.info(f"File {file_name} already exists. Replacing file.")
-            upload_session_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{file_id}/createUploadSession"
+            upload_session_url = f"{file_url}:/createUploadSession"
 
         response = requests.post(
             upload_session_url,
@@ -531,10 +604,11 @@ class SharepointTransfer(RemoteTransferHandler):
 
                 # If it's a 201, then we are done with the upload
                 if response.status_code == 201 or (
-                    response.status_code == 200 and file_id is not None
+                    response.status_code == 200 and file_url is not None
                 ):
-                    file_id = response.json()["id"]
-                    self.logger.info(f"Successfully uploaded file. File ID: {file_id}")
+                    self.logger.info(
+                        f"Successfully uploaded file. File ID: {response.json()['id']}"
+                    )
                 else:
                     self.logger.info(f"Uploaded chunk {i + 1} of {num_chunks}")
 
@@ -564,11 +638,11 @@ class SharepointTransfer(RemoteTransferHandler):
             file_path = f"{attributes['directory']}/{file_name}"
 
             try:
-                # Get the item id based on source path
-                file_id = self.get_file_id_from_path(file_path)
-                # Download file using item id
+                # Get the item url based on source path
+                file_url = self.get_file_url_from_path(file_path)
+                # Download file using item url
                 self.logger.info(f"Downloading file: {file_name}")
-                download_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{file_id}/content"
+                download_url = f"{file_url}:/content"
                 response = requests.get(
                     download_url,
                     headers={
@@ -611,14 +685,58 @@ class SharepointTransfer(RemoteTransferHandler):
     def tidy(self) -> None:
         """Nothing to tidy."""
 
-    def get_file_id_from_path(self, file_path: str) -> str | None:
+    def get_file_url_from_path(self, file_path: str) -> str | None:
         """Returns the id for a sharepoint drive item from the path."""
         if file_path == "":  # We are dealing with the root folder
             item_url = (
                 f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root"
             )
         else:
-            item_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{file_path}"
+            parts = file_path.split("/")
+            file_name = parts[-1]
+            # Remove the filename from the path
+            o365_file_path = "/".join(parts[:-1])
+
+            if o365_file_path.startswith("/"):
+                path_parts = o365_file_path.split("/")
+                # Get the first part of the path, which is the document library name
+                library_name = path_parts[1]
+                # file path then needs to be the rest of the path
+                o365_file_path = "/".join(path_parts[2:])
+
+                # If the path starts with a / then it's a document library, we need to get the id of the document library
+                # Do a GET request to /sites/{siteId}/drives to get the document libraries
+                response = requests.get(
+                    f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drives",
+                    headers={
+                        "Authorization": "Bearer " + self.credentials["access_token"],
+                    },
+                    timeout=60,
+                )
+                if response.status_code != 200:
+                    self.logger.error("Failed to get document libraries")
+                    self.logger.error(response.json())
+                    raise RemoteTransferError("Failed to get document libraries")
+
+                document_libraries = response.json()["value"]
+
+                for document_library in document_libraries:
+                    if document_library["name"] == library_name:
+                        item_path = (
+                            f"{o365_file_path}/{file_name}"
+                            if o365_file_path
+                            else file_name
+                        )
+                        return f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drives/{document_library['id']}/root:/{item_path}"
+
+                self.logger.error(
+                    f"Failed to find document library with name {library_name}"
+                )
+                raise RemoteTransferError(
+                    f"Failed to find Document Library named {library_name}"
+                )
+
+            return f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{re.sub(r'/+', '/', file_path)}"
 
         response = requests.get(
             item_url,

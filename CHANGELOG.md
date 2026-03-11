@@ -1,5 +1,10 @@
 # Changelog
 
+## v26.10.2
+
+- Add support for document libraries in Sharepoint
+- Fixed post copy action renaming to overwrite existing files if they already exist
+
 ## v26.8.0
 
 - Add conditionals property to sharepoint_source schema

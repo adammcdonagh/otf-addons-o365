@@ -60,6 +60,10 @@ As part of the upload, the `bucket-owner-full-control` ACL flag is applied to al
 
 JSON configs for transfers can be defined as follows:
 
+### Handling of document libraries
+
+If you have a document library in your Sharepoint site, you can specify the name of the document library as part of the path. By default, if the destination path does not start with a `/`, then the file will be uploaded to the root of the site (The default Document Library), otherwise it will be uploaded to the document library specified in the first component of the path.
+
 ## Example File Watch Only
 
 ```json
