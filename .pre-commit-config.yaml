@@ -62,7 +62,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: env VIRTUAL_ENV=./.venv PATH=./.venv/bin:$PATH mypy
+        entry: mypy
         language: python
         types: [python]
         args: ["--config-file", "mypy.ini"]
