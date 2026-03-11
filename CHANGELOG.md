@@ -1,6 +1,6 @@
 # Changelog
 
-## v26.10.1
+## v26.10.2
 
 - Add support for document libraries in Sharepoint
 - Fixed post copy action renaming to overwrite existing files if they already exist
