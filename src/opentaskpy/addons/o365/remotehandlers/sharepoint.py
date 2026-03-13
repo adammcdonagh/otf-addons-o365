@@ -431,9 +431,6 @@ class SharepointTransfer(RemoteTransferHandler):
         for file in files:
             # Strip the directory from the file
             file_name = file.split("/")[-1]
-            file_url = self.get_file_url_from_path(
-                self.spec["directory"] + "/" + file_name
-            )
 
             # Handle any rename that might be specified in the spec
             if "rename" in self.spec:
@@ -446,6 +443,8 @@ class SharepointTransfer(RemoteTransferHandler):
             # Append a directory if one is defined
             if "directory" in self.spec:
                 file_name = f"{self.spec['directory']}/{file_name}"
+
+            file_url = self.get_file_url_from_path(file_name)
 
             self.logger.info(
                 f"Uploading file: {file} to site {self.spec['siteName']} with path: {file_name}"

@@ -282,6 +282,56 @@ def test_local_to_sharepoint_transfer(tmpdir, o365_creds):
     assert transfer_obj.run()
 
 
+def test_local_to_sharepoint_with_file_rename(tmpdir, o365_creds):
+
+    task_definition = {
+        "type": "transfer",
+        "source": deepcopy(local_source_definition),
+        "destination": [deepcopy(sharepoint_destination_definition)],
+    }
+
+    task_definition = setup_creds_for_transfer(task_definition, o365_creds)
+
+    # Set the directory to the temp directory
+    task_definition["source"]["directory"] = tmpdir
+    task_definition["source"]["fileRegex"] = "^test.txt$"
+
+    random = randint(1000, 9999)
+
+    # Set the directory to the temp directory
+    task_definition["destination"][0]["rename"] = {
+        "pattern": "\\.txt$",
+        "sub": f".{random}",
+    }
+
+    # Create a file in the tmpdir
+    with open(f"{tmpdir}/test.txt", "w") as f:
+        f.write("test")
+
+    transfer_obj = transfer.Transfer(
+        None, "local-to-sharepoint-rename", task_definition
+    )
+
+    assert transfer_obj.run()
+
+    # Make sure that the file was renamed on Sharepoint
+    # Call the transfer obj again and use list files to get the files, we need to change the spec
+    # to point the source at the destination directory
+    transfer_obj = transfer.Transfer(None, "sharepoint-list-files", task_definition)
+
+    transfer_obj._set_remote_handlers()
+
+    files = transfer_obj.dest_remote_handlers[0].list_files(
+        task_definition["destination"][0]["directory"]
+    )
+    # Loop through files and assert that the file we expect is there and has been renamed
+    for file in files:
+        if file == f"test.{random}":
+            break
+
+    assert file == f"test.{random}"
+
+
 def test_local_to_sharepoint_transfer_document_library(tmpdir, o365_creds):
 
     task_definition = {
