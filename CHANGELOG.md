@@ -1,5 +1,9 @@
 # Changelog
 
+## v26.10.3
+
+- Fixed an issue where renaming when uploading a file did not actually rename the file
+
 ## v26.10.2
 
 - Add support for document libraries in Sharepoint
