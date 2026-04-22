@@ -5,10 +5,14 @@ import os
 import subprocess
 from copy import deepcopy
 from random import randint
+from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from dotenv import load_dotenv
 from opentaskpy.taskhandlers import transfer
+
+from opentaskpy.addons.o365.remotehandlers.sharepoint import SharepointTransfer
 
 # Set the log level to maximum
 os.environ["OTF_LOG_LEVEL"] = "DEBUG"
@@ -665,3 +669,120 @@ def test_sharepoint_pca_rename(tmpdir, o365_creds):
     transfer_obj = transfer.Transfer(None, "sharepoint-to-local-copy", task_definition)
 
     assert transfer_obj.run()
+
+
+def test_sharepoint_list_files_uses_protocol_timeout_value():
+    task_definition = {
+        "type": "transfer",
+        "source": {
+            "siteHostname": "example.sharepoint.com",
+            "siteName": "example-site",
+            "directory": "",
+            "fileRegex": "^does-not-match$",
+            "protocol": {
+                "name": (
+                    "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer"
+                ),
+                "refreshToken": "initial-refresh-token",
+                "clientId": "client-id",
+                "tenantId": "tenant-id",
+                "timeout": 42,
+            },
+        },
+        "destination": [deepcopy(local_destination_definition)],
+    }
+
+    site_lookup_response = MagicMock()
+    site_lookup_response.json.return_value = {"id": "site-id"}
+
+    list_response = MagicMock()
+    list_response.json.return_value = {"value": []}
+
+    with (
+        patch(
+            "opentaskpy.addons.o365.remotehandlers.sharepoint.get_access_token",
+            return_value={
+                "access_token": "access-token",
+                "refresh_token": "new-refresh-token",
+                "expiry": 4102444800,
+            },
+        ),
+        patch(
+            "opentaskpy.addons.o365.remotehandlers.sharepoint.requests.get",
+            side_effect=[site_lookup_response, list_response],
+        ) as mocked_get,
+    ):
+        transfer_obj = transfer.Transfer(
+            None, "sharepoint-timeout-test", task_definition
+        )
+        transfer_obj._set_remote_handlers()
+
+        files = transfer_obj.source_remote_handler.list_files()
+
+    assert files == {}
+    assert mocked_get.call_count == 2
+    assert mocked_get.call_args_list[0].kwargs["timeout"] == 42
+    assert mocked_get.call_args_list[1].kwargs["timeout"] == 42
+
+
+def test_sharepoint_request_retries_on_get_timeout(caplog):
+    task_definition = {
+        "type": "transfer",
+        "source": {
+            "siteHostname": "example.sharepoint.com",
+            "siteName": "example-site",
+            "directory": "",
+            "fileRegex": "^does-not-match$",
+            "protocol": {
+                "name": (
+                    "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer"
+                ),
+                "refreshToken": "initial-refresh-token",
+                "clientId": "client-id",
+                "tenantId": "tenant-id",
+                "timeout": 1,
+            },
+        },
+        "destination": [deepcopy(local_destination_definition)],
+    }
+
+    init_response = MagicMock()
+    init_response.json.return_value = {"id": "site-id"}
+
+    retry_success_response = MagicMock()
+    retry_success_response.status_code = 200
+
+    with (
+        patch(
+            "opentaskpy.addons.o365.remotehandlers.sharepoint.get_access_token",
+            return_value={
+                "access_token": "access-token",
+                "refresh_token": "new-refresh-token",
+                "expiry": 4102444800,
+            },
+        ),
+        patch(
+            "opentaskpy.addons.o365.remotehandlers.sharepoint.requests.get",
+            side_effect=[
+                init_response,
+                requests.exceptions.ReadTimeout("timeout"),
+                requests.exceptions.ReadTimeout("timeout-again"),
+                requests.exceptions.ReadTimeout("timeout-again-2"),
+                retry_success_response,
+            ],
+        ) as mocked_get,
+        patch("tenacity.nap.sleep", return_value=None),
+    ):
+        transfer_obj = transfer.Transfer(None, "sharepoint-retry-test", task_definition)
+        transfer_obj._set_remote_handlers()
+
+        result = transfer_obj.source_remote_handler._request(
+            "GET", "https://example.test/resource", timeout=1
+        )
+
+    assert result is retry_success_response
+    assert mocked_get.call_count == 5
+    assert "retrying attempt 2" in caplog.text.lower()
+    assert "retrying attempt 3" in caplog.text.lower()
+    assert "retrying attempt 4" in caplog.text.lower()
+    assert "traceback" in caplog.text.lower()
