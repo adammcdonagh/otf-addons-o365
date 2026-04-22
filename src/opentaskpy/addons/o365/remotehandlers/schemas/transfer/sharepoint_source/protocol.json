@@ -9,6 +9,10 @@
         "opentaskpy.addons.o365.remotehandlers.sharepoint.SharepointTransfer"
       ]
     },
+    "timeout": {
+      "type": "integer",
+      "default": 30
+    },
     "refreshToken": {
       "type": "string"
     },

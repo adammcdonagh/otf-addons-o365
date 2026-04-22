@@ -3,9 +3,11 @@
 import glob
 import math
 import re
+import traceback
 from datetime import datetime
 from os import path
 from time import sleep
+from typing import Any
 
 import opentaskpy.otflogging
 import requests
@@ -13,6 +15,13 @@ from dateutil.tz import tzlocal
 from opentaskpy.config.variablecaching import cache_utils
 from opentaskpy.exceptions import RemoteTransferError
 from opentaskpy.remotehandlers.remotehandler import RemoteTransferHandler
+from tenacity import (
+    RetryCallState,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from .creds import get_access_token
 
@@ -23,6 +32,63 @@ class SharepointTransfer(RemoteTransferHandler):
     """Sharepoint remote transfer handler."""
 
     TASK_TYPE = "T"
+
+    @staticmethod
+    def _log_retry_attempt(retry_state: RetryCallState) -> None:
+        """Log details before tenacity sleeps and retries a request."""
+        if not retry_state.args:
+            return
+
+        self = retry_state.args[0]
+        method = str(retry_state.args[1]) if len(retry_state.args) > 1 else "UNKNOWN"
+        url = str(retry_state.args[2]) if len(retry_state.args) > 2 else "UNKNOWN"
+        sleep_for = (
+            retry_state.next_action.sleep
+            if retry_state.next_action is not None
+            else "unknown"
+        )
+        next_attempt = retry_state.attempt_number + 1
+        exception = retry_state.outcome.exception() if retry_state.outcome else None
+        exception_traceback = ""
+
+        if exception is not None:
+            exception_traceback = "".join(
+                traceback.format_exception(
+                    type(exception), exception, exception.__traceback__
+                )
+            )
+
+        self.logger.warning(
+            "Retrying SharePoint request %s %s after exception: %s "
+            "(failed attempt %s, retrying attempt %s, next sleep %ss)\n%s",
+            method,
+            url,
+            exception if exception is not None else "unknown",
+            retry_state.attempt_number,
+            next_attempt,
+            sleep_for,
+            exception_traceback,
+        )
+        self.logger.info(f"Sleeping for {sleep_for} seconds before retry")
+
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(6),
+        wait=wait_exponential(multiplier=2, min=5, max=60),
+        retry=retry_if_exception_type(requests.exceptions.ReadTimeout),
+        before_sleep=_log_retry_attempt,
+    )
+    def _request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        """Perform a request with retry for transient timeout failures."""
+        method_upper = method.upper()
+        self.logger.debug(f"Making request to {url} with method {method}")
+        if method_upper == "GET":
+            return requests.get(url, **kwargs)  # pylint: disable=missing-timeout
+        if method_upper == "POST":
+            return requests.post(url, **kwargs)  # pylint: disable=missing-timeout
+        if method_upper == "PUT":
+            return requests.put(url, **kwargs)  # pylint: disable=missing-timeout
+        raise ValueError(f"Unsupported HTTP method for retry wrapper: {method}")
 
     def __init__(self, spec: dict):
         """Initialise the SharepointTransfer handler.
@@ -52,10 +118,14 @@ class SharepointTransfer(RemoteTransferHandler):
             "Authorization": "Bearer " + self.credentials["access_token"],
             "Content-Type": "application/json",
         }
-        response = requests.get(
+
+        self.timeout = self.spec["protocol"].get("timeout", 30)
+
+        response = self._request(
+            "GET",
             f"https://graph.microsoft.com/v1.0/sites/{self.spec['siteHostname']}:/sites/{self.spec['siteName']}",
             headers=self.headers,
-            timeout=5,
+            timeout=self.timeout,
         ).json()
 
         # Check the response is OK
@@ -117,13 +187,14 @@ class SharepointTransfer(RemoteTransferHandler):
             create_folder_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root/children"
         else:
             create_folder_url = f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/items/{parent_id}/children"
-        response = requests.post(
+        response = self._request(
+            "POST",
             create_folder_url,
             headers={
                 "Authorization": "Bearer " + self.credentials["access_token"],
                 "Content-Type": "application/json",
             },
-            timeout=60,
+            timeout=self.timeout,
             json={"name": folder, "folder": {}},
         )
         if response.status_code != 201:
@@ -164,7 +235,7 @@ class SharepointTransfer(RemoteTransferHandler):
                     headers={
                         "Authorization": "Bearer " + self.credentials["access_token"],
                     },
-                    timeout=60,
+                    timeout=self.timeout,
                 )
                 if response.status_code != 204:
                     self.logger.error(f"Failed to delete file: {file_name}")
@@ -216,7 +287,7 @@ class SharepointTransfer(RemoteTransferHandler):
                 response = requests.patch(
                     file_url,
                     headers=patch_headers,
-                    timeout=60,
+                    timeout=self.timeout,
                     json=patch_body,
                 )
                 if response.status_code == 409:
@@ -239,7 +310,7 @@ class SharepointTransfer(RemoteTransferHandler):
                                 "Bearer " + self.credentials["access_token"]
                             ),
                         },
-                        timeout=60,
+                        timeout=self.timeout,
                     )
                     # Check the response was a success
                     if response.status_code != 204:
@@ -253,7 +324,7 @@ class SharepointTransfer(RemoteTransferHandler):
                     response = requests.patch(
                         file_url,
                         headers=patch_headers,
-                        timeout=60,
+                        timeout=self.timeout,
                         json=patch_body,
                     )
                 if response.status_code != 200:
@@ -287,12 +358,13 @@ class SharepointTransfer(RemoteTransferHandler):
             else:
                 # get_file_url_from_path returns a path-based URL, not a drive item ID;
                 # resolve it to the actual item ID so it can be used in parentReference.id
-                response = requests.get(
+                response = self._request(
+                    "GET",
                     folder_url,
                     headers={
                         "Authorization": "Bearer " + self.credentials["access_token"],
                     },
-                    timeout=60,
+                    timeout=self.timeout,
                 )
                 if response.status_code == 404:
                     self.logger.info(f"Folder {folder} does not exist, creating")
@@ -351,10 +423,11 @@ class SharepointTransfer(RemoteTransferHandler):
                     "Content-Type": "application/json",
                 }
 
-                response = requests.get(
+                response = self._request(
+                    "GET",
                     url,
                     headers=headers,
-                    timeout=30,
+                    timeout=self.timeout,
                 ).json()
 
                 if "value" in response and response["value"]:
@@ -476,7 +549,7 @@ class SharepointTransfer(RemoteTransferHandler):
                             "Content-Type": "application/json",
                         },
                         data=f,
-                        timeout=60,
+                        timeout=self.timeout,
                     )
                     if response.status_code != 409:
                         break
@@ -535,13 +608,14 @@ class SharepointTransfer(RemoteTransferHandler):
             self.logger.info(f"File {file_name} already exists. Replacing file.")
             upload_session_url = f"{file_url}:/createUploadSession"
 
-        response = requests.post(
+        response = self._request(
+            "POST",
             upload_session_url,
             headers={
                 "Authorization": "Bearer " + self.credentials["access_token"],
                 "Content-Type": "application/json",
             },
-            timeout=60,
+            timeout=self.timeout,
         )
         if response.status_code != 200:
             self.logger.error(f"Failed to create upload session: {file_name}")
@@ -587,7 +661,8 @@ class SharepointTransfer(RemoteTransferHandler):
                 chunk = f.read(chunk_end - chunk_start + 1)
 
                 # PUT the chunk to the upload session url
-                response = requests.put(
+                response = self._request(
+                    "PUT",
                     upload_session_url,
                     data=chunk,
                     headers=headers,
@@ -642,12 +717,13 @@ class SharepointTransfer(RemoteTransferHandler):
                 # Download file using item url
                 self.logger.info(f"Downloading file: {file_name}")
                 download_url = f"{file_url}:/content"
-                response = requests.get(
+                response = self._request(
+                    "GET",
                     download_url,
                     headers={
                         "Authorization": "Bearer " + self.credentials["access_token"],
                     },
-                    timeout=60,
+                    timeout=self.timeout,
                 )
 
                 # Check the response was a success
@@ -705,12 +781,13 @@ class SharepointTransfer(RemoteTransferHandler):
 
                 # If the path starts with a / then it's a document library, we need to get the id of the document library
                 # Do a GET request to /sites/{siteId}/drives to get the document libraries
-                response = requests.get(
+                response = self._request(
+                    "GET",
                     f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drives",
                     headers={
                         "Authorization": "Bearer " + self.credentials["access_token"],
                     },
-                    timeout=60,
+                    timeout=self.timeout,
                 )
                 if response.status_code != 200:
                     self.logger.error("Failed to get document libraries")
@@ -737,12 +814,13 @@ class SharepointTransfer(RemoteTransferHandler):
 
             return f"https://graph.microsoft.com/v1.0/sites/{self.site_id}/drive/root:/{re.sub(r'/+', '/', file_path)}"
 
-        response = requests.get(
+        response = self._request(
+            "GET",
             item_url,
             headers={
                 "Authorization": "Bearer " + self.credentials["access_token"],
             },
-            timeout=60,
+            timeout=self.timeout,
         )
         # Check the response was a success
         if response.status_code != 200:
