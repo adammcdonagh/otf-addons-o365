@@ -1,5 +1,10 @@
 # Changelog
 
+## v26.16.1
+
+- Add exponential backoff for MS Graph API calls
+- Add optional timeout to protocol definition
+
 ## v26.10.3
 
 - Fixed an issue where renaming when uploading a file did not actually rename the file
