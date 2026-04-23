@@ -1,5 +1,9 @@
 # Changelog
 
+## v26.16.2
+
+- Some requests calls were missed from the retry logic. Ensured that all calls are retried.
+
 ## v26.16.1
 
 - Add exponential backoff for MS Graph API calls

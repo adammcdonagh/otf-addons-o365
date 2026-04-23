@@ -88,6 +88,10 @@ class SharepointTransfer(RemoteTransferHandler):
             return requests.post(url, **kwargs)  # pylint: disable=missing-timeout
         if method_upper == "PUT":
             return requests.put(url, **kwargs)  # pylint: disable=missing-timeout
+        if method_upper == "PATCH":
+            return requests.patch(url, **kwargs)  # pylint: disable=missing-timeout
+        if method_upper == "DELETE":
+            return requests.delete(url, **kwargs)  # pylint: disable=missing-timeout
         raise ValueError(f"Unsupported HTTP method for retry wrapper: {method}")
 
     def __init__(self, spec: dict):
@@ -230,7 +234,8 @@ class SharepointTransfer(RemoteTransferHandler):
                 if not file_url:
                     self.logger.error(f"Failed to get file URL for {file_path}")
                     return 1
-                response = requests.delete(
+                response = self._request(
+                    "DELETE",
                     file_url,
                     headers={
                         "Authorization": "Bearer " + self.credentials["access_token"],
@@ -284,7 +289,8 @@ class SharepointTransfer(RemoteTransferHandler):
                     "Authorization": "Bearer " + self.credentials["access_token"],
                     "Content-Type": "application/json",
                 }
-                response = requests.patch(
+                response = self._request(
+                    "PATCH",
                     file_url,
                     headers=patch_headers,
                     timeout=self.timeout,
@@ -303,7 +309,8 @@ class SharepointTransfer(RemoteTransferHandler):
                             f"Failed to get file URL for {destination_path}/{new_file}"
                         )
                         return 1
-                    response = requests.delete(
+                    response = self._request(
+                        "DELETE",
                         conflict_url,
                         headers={
                             "Authorization": (
@@ -321,7 +328,8 @@ class SharepointTransfer(RemoteTransferHandler):
                         self.logger.error(response.json())
                         return 1
 
-                    response = requests.patch(
+                    response = self._request(
+                        "PATCH",
                         file_url,
                         headers=patch_headers,
                         timeout=self.timeout,
@@ -540,7 +548,8 @@ class SharepointTransfer(RemoteTransferHandler):
                 retry_delay = 1
 
                 for attempt in range(max_retries):
-                    response = requests.put(
+                    response = self._request(
+                        "PUT",
                         upload_url,
                         headers={
                             "Authorization": (
